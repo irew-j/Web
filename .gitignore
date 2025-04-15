@@ -1,7 +1,11 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # ======= Frontend (Node.js, React 등) =======
 # 로그 파일
 =======
+=======
+
+>>>>>>> 57b54db (fix: resolve merge conflicts)
 # Logs
 >>>>>>> c746a3e (첫번째 커밋)
 logs
@@ -70,4 +74,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+<<<<<<< HEAD
 >>>>>>> c746a3e (첫번째 커밋)
+=======
+.evn
+>>>>>>> 57b54db (fix: resolve merge conflicts)

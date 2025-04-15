@@ -1,30 +1,97 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
-import Home from "./pages/Home";
-import Benefits from "./pages/Benefits";
-import Trends from "./pages/Trends";
-import Community from "./pages/Community";
-import MyPage from "./pages/MyPage";
 
-const App = () => {
+// src/App.js
+
+import React, { useState } from 'react';
+import Header from './components/Header';
+import SearchBar from './components/SearchBar';
+import TripResult from './components/TripResult';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import TripHistoryPage from './pages/TripHistoryPage';
+import { useWeather } from './hooks/useWeather';
+import Storybook from './components/Storybook';
+
+function App() {
+  const [location, setLocation] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [view, setView] = useState('home');
+
+  // 예시 trip 데이터
+  const mockTrip = {
+    date: '2025-03-24',
+    location: '춘천',
+    keywords: ['감성', '호수', '힐링'],
+    memo: '춘천 남이섬에서 봄바람 맞으며 힐링한 하루 🌸',
+    imageUrl: 'https://source.unsplash.com/400x250/?lake,spring',
+  };
+
+  const { weather, loading } = useWeather(location);
+
+  // 검색 실행 함수
+  const handleSearch = () => {
+    console.log('검색 실행:', location, keyword);
+  };
+
+  // 페이지 이동 처리
+  const handleNavigate = (page) => {
+    setView(page);
+  };
+
   return (
-    <Router>
-      <div className="flex flex-col min-h-screen font-inter bg-gray-50">
-        <Navbar />
-        <main className="flex-grow">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/benefits" element={<Benefits />} />
-            <Route path="/trends" element={<Trends />} />
-            <Route path="/community" element={<Community />} />
-            <Route path="/mypage" element={<MyPage />} />
-          </Routes>
-        </main>
-        <Footer />
-      </div>
-    </Router>
+    <div className="App font-sans">
+      <Header
+        isLoggedIn={isLoggedIn}
+        onLogout={() => {
+          setIsLoggedIn(false);
+          handleNavigate('home');
+        }}
+        onNavigate={handleNavigate}
+      />
+
+      <main className="max-w-4xl mx-auto p-4">
+        {/* 홈 화면 */}
+        {view === 'home' && (
+          <>
+            <SearchBar
+              location={location}
+              setLocation={setLocation}
+              keyword={keyword}
+              setKeyword={setKeyword}
+              onSearch={handleSearch}
+            />
+            {!loading && location && <TripResult weather={weather} />}
+          </>
+        )}
+
+        {/* 로그인 화면 */}
+        {view === 'login' && (
+          <LoginPage
+            onLogin={() => {
+              setIsLoggedIn(true);
+              handleNavigate('home');
+            }}
+          />
+        )}
+
+        {/* 회원가입 화면 */}
+        {view === 'signup' && (
+          <SignupPage
+            onSignup={() => {
+              setIsLoggedIn(true);
+              handleNavigate('home');
+            }}
+          />
+        )}
+
+        {/* 여행 기록 화면 */}
+        {view === 'history' && <TripHistoryPage />}
+
+        {/* Storybook 화면 */}
+        {view === 'storybook' && <Storybook trip={mockTrip} />}
+      </main>
+    </div>
   );
-};
+}
 
 export default App;
