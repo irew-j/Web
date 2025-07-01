@@ -27,6 +27,9 @@ import {
     FaArrowDown,
     FaChevronLeft,
     FaChevronRight,
+    FaClock,
+    FaRuler,
+    FaExclamationTriangle,
 } from "react-icons/fa"
 import { fetchDirections } from '../api/trip';
 
@@ -76,6 +79,9 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
     const searchBoxRef = useRef(null)
 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    const [routeInfo, setRouteInfo] = useState(null);
+    const [routePolyline, setRoutePolyline] = useState(null);
 
     // places 상태가 변경될 때마다 ref 업데이트
     useEffect(() => {
@@ -326,7 +332,9 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                         if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
                             setSelectedPlaceDetails(place);
                         } else {
-                            console.log("장소 상세 정보를 가져오는데 실패했습니다.");
+                            console.error('Place details error:', status, place);
+                            setToastMessage('장소 상세 정보를 불러오지 못했습니다. (오류: ' + status + ')');
+                            setShowToast(true);
                         }
                     });
                 }
@@ -372,7 +380,6 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                     });
 
                     marker.addListener("click", () => {
-                        console.log("Marker clicked:", place);
                         setActivePlace(index);
                         setSelectedPlace(place);
                         // 선택된 장소의 상세 정보 가져오기
@@ -382,13 +389,13 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                                 placeId: place.id,
                                 fields: ['name', 'formatted_address', 'geometry', 'photos', 'rating', 'user_ratings_total', 'opening_hours', 'price_level', 'website', 'formatted_phone_number']
                             };
-
                             service.getDetails(request, (placeDetails, status) => {
                                 if (status === window.google.maps.places.PlacesServiceStatus.OK && placeDetails) {
-                                    console.log("Place details loaded:", placeDetails);
                                     setSelectedPlaceDetails(placeDetails);
                                 } else {
-                                    console.log("Failed to load place details");
+                                    console.error('Place details error:', status, placeDetails);
+                                    setToastMessage('장소 상세 정보를 불러오지 못했습니다. (오류: ' + status + ')');
+                                    setShowToast(true);
                                 }
                             });
                         }
@@ -1018,63 +1025,71 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                 selectedPlace.mapy,
                 selectedPlace.mapx
             );
-            // data: 카카오 원본 JSON 문자열
-            let kakao;
-            try {
-                kakao = typeof data === "string" ? JSON.parse(data) : data;
-            } catch (e) {
-                setDirectionsError("카카오 길찾기 응답 파싱 오류");
-                return;
-            }
-            // 경로(폴리라인), 거리, 소요시간 추출
-            const route = kakao.routes?.[0];
-            if (!route) {
-                setDirectionsError("경로 정보를 찾을 수 없습니다.");
-                return;
-            }
-            const section = route.sections?.[0];
-            const summary = route.summary;
-            const polyline = section?.roads?.[0]?.polyline;
-            const distance = summary?.distance; // (미터)
-            const duration = summary?.duration; // (초)
-            // 거리/시간 보기 좋게 변환
-            const distanceStr = distance ? (distance / 1000).toFixed(1) + "km" : "-";
-            const durationStr = duration ? Math.round(duration / 60) + "분" : "-";
-            // 지도에 polyline 표시
-            if (polyline) {
+            // data: 카카오/티맵 스타일 응답 (vertexes)
+            if (data && data.routes && data.routes[0] && data.routes[0].sections && data.routes[0].sections[0]) {
+                const roads = data.routes[0].sections[0].roads;
+                let path = [];
+                roads.forEach(road => {
+                    const v = road.vertexes;
+                    for (let i = 0; i < v.length; i += 2) {
+                        path.push({ lng: v[i], lat: v[i + 1] });
+                    }
+                });
                 if (routePolyline) {
                     routePolyline.setMap(null);
                 }
-                // 카카오 polyline은 좌표 배열(경도,위도) |로 구분 → 구글 polyline으로 변환
-                const decodedPath = polyline.split("|").map(pair => {
-                    const [lng, lat] = pair.split(",").map(Number);
-                    return new window.google.maps.LatLng(lat, lng);
-                });
-                const polylineObj = new window.google.maps.Polyline({
-                    path: decodedPath,
+                const polyline = new window.google.maps.Polyline({
+                    path: path,
                     geodesic: true,
                     strokeColor: "#0D9488",
                     strokeOpacity: 0.8,
                     strokeWeight: 5,
                     map: mapInstance,
                 });
-                setRoutePolyline(polylineObj);
-                setRouteInfo({ distance: distanceStr, duration: durationStr });
+                setRoutePolyline(polyline);
+                // 거리/시간 변환
+                const summary = data.routes[0].summary;
+                setRouteInfo({
+                    distance: (summary.distance / 1000).toFixed(1) + 'km',
+                    duration: Math.round(summary.duration / 60) + '분'
+                });
                 setShowDirections(true);
             } else {
-                setDirectionsError("경로 선 정보를 찾을 수 없습니다.");
+                setDirectionsError("경로 정보를 불러올 수 없습니다.");
             }
         } catch (error) {
             setDirectionsError("길찾기 정보를 불러오지 못했습니다.");
         }
     };
 
-    // 길찾기 결과(거리, 소요시간 등) 표시 UI 추가
+    // 길찾기 결과(거리, 소요시간 등) 표시 UI 개선
     {
         showDirections && routeInfo && (
-            <div className="mt-2 p-3 bg-white rounded-lg shadow text-gray-700 flex flex-col gap-1 border border-teal-100">
-                <div><b>예상 거리:</b> {routeInfo.distance}</div>
-                <div><b>예상 소요시간:</b> {routeInfo.duration}</div>
+            <div className="mt-4 p-4 bg-gradient-to-r from-teal-50 to-cyan-50 rounded-xl shadow flex items-center gap-6 border border-teal-100">
+                <div className="flex items-center gap-2 text-lg font-semibold text-teal-700">
+                    <FaRoute className="text-teal-500 text-2xl" />
+                    경로 안내
+                </div>
+                <div className="flex items-center gap-2 text-gray-700">
+                    <FaRuler className="text-gray-400" />
+                    <span className="font-medium">{routeInfo.distance}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-700">
+                    <FaClock className="text-gray-400" />
+                    <span className="font-medium">{routeInfo.duration}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-500 ml-auto">
+                    {travelMode === "WALKING" && <FaWalking className="text-teal-400" title="도보" />}
+                    {travelMode === "DRIVING" && <FaCar className="text-teal-400" title="자동차" />}
+                </div>
+            </div>
+        )
+    }
+    {
+        directionsError && (
+            <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-400 text-red-700 rounded-xl flex items-center gap-2">
+                <FaExclamationTriangle className="text-red-400 text-xl" />
+                <span>{directionsError}</span>
             </div>
         )
     }
@@ -1083,8 +1098,13 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
     const hideRoute = () => {
         if (directionsRenderer) {
             directionsRenderer.setDirections({ routes: [] });
-            setShowDirections(false);
         }
+        if (routePolyline) {
+            routePolyline.setMap(null);
+            setRoutePolyline(null);
+        }
+        setShowDirections(false);
+        setRouteInfo(null);
     };
 
     const removePlace = (index) => {
@@ -1487,10 +1507,13 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                                                                 placeId: place.id,
                                                                 fields: ['name', 'formatted_address', 'geometry', 'photos', 'rating', 'user_ratings_total', 'opening_hours', 'price_level', 'website', 'formatted_phone_number']
                                                             };
-
                                                             service.getDetails(request, (placeDetails, status) => {
                                                                 if (status === window.google.maps.places.PlacesServiceStatus.OK && placeDetails) {
                                                                     setSelectedPlaceDetails(placeDetails);
+                                                                } else {
+                                                                    console.error('Place details error:', status, placeDetails);
+                                                                    setToastMessage('장소 상세 정보를 불러오지 못했습니다. (오류: ' + status + ')');
+                                                                    setShowToast(true);
                                                                 }
                                                             });
                                                         }

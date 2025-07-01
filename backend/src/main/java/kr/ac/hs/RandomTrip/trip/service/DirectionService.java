@@ -1,5 +1,6 @@
 package kr.ac.hs.RandomTrip.trip.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -13,10 +14,15 @@ public class DirectionService {
     @Value("${kakao.api-key}")
     private String kakaoApiKey;
 
-    private final WebClient webClient = WebClient.builder()
-            .baseUrl("https://apis-navi.kakaomobility.com")
-            .defaultHeader("Authorization", kakaoApiKey)
-            .build();
+    private WebClient webClient;
+
+    @PostConstruct
+    public void init() {
+        this.webClient = WebClient.builder()
+                .baseUrl("https://apis-navi.kakaomobility.com")
+                .defaultHeader("Authorization", "KakaoAK " + kakaoApiKey)
+                .build();
+    }
 
     public Mono<String> getDirections(double originLat, double originLng,
                                       double destLat, double destLng) {
@@ -31,3 +37,4 @@ public class DirectionService {
                 .bodyToMono(String.class);
     }
 }
+
