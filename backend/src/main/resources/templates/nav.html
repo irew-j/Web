@@ -1,0 +1,11 @@
+<div class="nav" th:fragment="navbar">
+    <a class="logo">RandomTrip</a>
+<!--    <a href="/login">login</a>-->
+<!--    <a href="/register">register</a>-->
+    <div sec:authorize="isAuthenticated()">
+        <span sec:authentication="principal.username"></span>
+        <a href="/logout">로그아웃</a>
+    </div>
+
+
+</div>
