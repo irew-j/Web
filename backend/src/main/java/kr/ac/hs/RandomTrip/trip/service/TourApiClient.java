@@ -95,4 +95,24 @@ public class TourApiClient {
 
         return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
     }
+
+    // 축제, 행사 정보를 검색하는 메서드 (contentTypeId: 15)
+    public JsonNode searchFestivals(String areaCode, int numOfRows) throws Exception {
+        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService1/searchFestival1");
+        urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
+        urlBuilder.append("&numOfRows=").append(numOfRows);
+        urlBuilder.append("&pageNo=1&MobileOS=ETC&MobileApp=RandomTrip&_type=json");
+        urlBuilder.append("&listYN=Y&arrange=R");
+
+        if (areaCode != null && !areaCode.isEmpty()) {
+            urlBuilder.append("&areaCode=").append(areaCode);
+        }
+
+        // 현재 날짜 이후의 축제만 검색하기 위한 날짜 설정
+        java.time.LocalDate today = java.time.LocalDate.now();
+        String eventStartDate = today.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+        urlBuilder.append("&eventStartDate=").append(eventStartDate);
+
+        return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
+    }
 }

@@ -76,7 +76,7 @@ public class TripService {
                 )));
             }
 
-            // 나머지 로직은 동일
+            // 각 코스 처리
             List<CompletableFuture<List<TripResponse>>> courseFutures = allCourseItems.stream()
                     .map(courseItems -> processCourseConcurrently(courseItems, targetAreaCode, regionName))
                     .collect(Collectors.toList());
@@ -92,13 +92,25 @@ public class TripService {
                             .collect(Collectors.toList())
             ).get();
 
-
             if (results.isEmpty()) {
                 return Collections.singletonList(Collections.singletonList(new TripResponse(
                         "추천 실패", "", "", "코스에 맞는 여행지를 찾을 수 없습니다.", "", "", "", ""
                 )));
             }
 
+            // 🎉 축제 정보 추가 - 각 코스에 축제 정보 추가
+            List<TripResponse> festivals = getFestivalsByArea(targetAreaCode);
+            if (!festivals.isEmpty()) {
+                for (List<TripResponse> course : results) {
+                    // 각 코스에 축제 정보 추가 (최대 1개씩)
+                    if (!festivals.isEmpty()) {
+                        course.add(festivals.get(0));
+                        if (festivals.size() > 1) {
+                            festivals = festivals.subList(1, festivals.size()); // 다음 코스를 위해 사용된 축제 제거
+                        }
+                    }
+                }
+            }
 
             return results;
 
@@ -236,6 +248,60 @@ public class TripService {
             return 2 * r * Math.asin(Math.sqrt(h));
         } catch (Exception e) {
             return Double.MAX_VALUE;
+        }
+    }
+
+
+    private List<TripResponse> getFestivalsByArea(String areaCode) {
+        try {
+            if (areaCode == null || areaCode.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            JsonNode festivalItems = tourApiClient.searchFestivals(areaCode, 10);
+            List<TripResponse> festivals = new ArrayList<>();
+
+            if (festivalItems.isArray() && festivalItems.size() > 0) {
+                // 최대 2개의 축제만 추천
+                int maxFestivals = Math.min(2, festivalItems.size());
+                for (int i = 0; i < maxFestivals; i++) {
+                    JsonNode festivalNode = festivalItems.get(i);
+
+                    // 축제 기간 체크 (현재 날짜 이후인지 확인)
+                    if (isFestivalValid(festivalNode)) {
+                        TripResponse festival = destinationMapper.toFestivalTripResponse(festivalNode);
+                        festivals.add(festival);
+                    }
+                }
+            }
+
+            return festivals;
+        } catch (Exception e) {
+            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean isFestivalValid(JsonNode festivalNode) {
+        try {
+            String eventStartDate = festivalNode.path("eventstartdate").asText("");
+            String eventEndDate = festivalNode.path("eventenddate").asText("");
+
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
+
+            // 종료일이 있는 경우 종료일 기준으로, 없으면 시작일 기준으로 체크
+            if (!eventEndDate.isEmpty()) {
+                java.time.LocalDate endDate = java.time.LocalDate.parse(eventEndDate, formatter);
+                return !endDate.isBefore(today);
+            } else if (!eventStartDate.isEmpty()) {
+                java.time.LocalDate startDate = java.time.LocalDate.parse(eventStartDate, formatter);
+                return !startDate.isBefore(today);
+            }
+
+            return true; // 날짜 정보가 없으면 일단 유효한 것으로 간주
+        } catch (Exception e) {
+            return true; // 파싱 오류 시 유효한 것으로 간주
         }
     }
 }
