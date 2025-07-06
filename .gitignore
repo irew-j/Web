@@ -18,6 +18,8 @@ dist-ssr/
 .env
 *.local
 
+frontend/.env
+
 # 에디터 및 OS 관련
 .vscode/
 !.vscode/extensions.json
@@ -44,6 +46,10 @@ application.properties
 application.yml
 application-*.properties
 application-*.yml
+
+# Spring Boot 환경 설정 파일 무시
+backend/src/main/resources/application.properties
+backend/src/main/resources/application-*.properties
 
 # Gradle 관련
 .gradle/
