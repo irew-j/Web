@@ -98,26 +98,25 @@ public class TripService {
                 )));
             }
 
-            // 🎉 축제 정보 추가 - 각 코스에 축제 정보 추가
-            List<TripResponse> festivals = getFestivalsByArea(targetAreaCode);
-            if (!festivals.isEmpty()) {
-                for (List<TripResponse> course : results) {
-                    // 각 코스에 축제 정보 추가 (최대 1개씩)
-                    if (!festivals.isEmpty()) {
-                        course.add(festivals.get(0));
-                        if (festivals.size() > 1) {
-                            festivals = festivals.subList(1, festivals.size()); // 다음 코스를 위해 사용된 축제 제거
-                        }
-                    }
-                }
-            }
-
             return results;
 
         } catch (Exception e) {
             return Collections.singletonList(Collections.singletonList(new TripResponse(
                     "추천 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
             )));
+        }
+    }
+
+    // 축제 정보 조회를 위한 별도 메서드
+    public List<TripResponse> getFestivals(String query) {
+        try {
+            String targetAreaCode = destinationMapper.resolveAreaCode(query);
+            return getFestivalsByArea(targetAreaCode);
+        } catch (Exception e) {
+            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
+            return Collections.singletonList(new TripResponse(
+                    "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
+            ));
         }
     }
 
@@ -251,7 +250,7 @@ public class TripService {
         }
     }
 
-
+    // 축제 정보 조회 메서드 (기존 코드와 동일)
     private List<TripResponse> getFestivalsByArea(String areaCode) {
         try {
             if (areaCode == null || areaCode.isEmpty()) {
@@ -262,11 +261,8 @@ public class TripService {
             List<TripResponse> festivals = new ArrayList<>();
 
             if (festivalItems.isArray() && festivalItems.size() > 0) {
-                // 최대 2개의 축제만 추천
-                int maxFestivals = Math.min(2, festivalItems.size());
-                for (int i = 0; i < maxFestivals; i++) {
-                    JsonNode festivalNode = festivalItems.get(i);
-
+                // 모든 축제 정보를 가져오도록 수정 (기존에는 최대 2개만)
+                for (JsonNode festivalNode : festivalItems) {
                     // 축제 기간 체크 (현재 날짜 이후인지 확인)
                     if (isFestivalValid(festivalNode)) {
                         TripResponse festival = destinationMapper.toFestivalTripResponse(festivalNode);
@@ -302,6 +298,18 @@ public class TripService {
             return true; // 날짜 정보가 없으면 일단 유효한 것으로 간주
         } catch (Exception e) {
             return true; // 파싱 오류 시 유효한 것으로 간주
+        }
+    }
+
+    // areaCode를 직접 받는 메서드 추가
+    public List<TripResponse> getFestivalsByAreaCode(String areaCode) {
+        try {
+            return getFestivalsByArea(areaCode);
+        } catch (Exception e) {
+            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
+            return Collections.singletonList(new TripResponse(
+                    "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
+            ));
         }
     }
 }
