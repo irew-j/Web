@@ -266,6 +266,10 @@ public class TripService {
                     // 축제 기간 체크 (현재 날짜 이후인지 확인)
                     if (isFestivalValid(festivalNode)) {
                         TripResponse festival = destinationMapper.toFestivalTripResponse(festivalNode);
+
+                        // 좌표 보정 적용
+                        festival = correctFestivalCoordinates(festival);
+
                         festivals.add(festival);
                     }
                 }
@@ -276,6 +280,21 @@ public class TripService {
             System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    // 특정 축제 데이터의 좌표 보정 메서드 추가
+    private TripResponse correctFestivalCoordinates(TripResponse festival) {
+        // "위대한 축구선수 100인 전" 데이터 보정
+        if ("위대한 축구선수 100인 전".equals(festival.getTitle()) &&
+                festival.getAddress() != null &&
+                festival.getAddress().contains("서울특별시 강서구 하늘길 38")) {
+
+            // 올바른 좌표로 보정 (김포공항 인근의 정확한 좌표)
+            festival.setMapy("37.5713695798026");  // 위도
+            festival.setMapx("126.802960133589");  // 경도
+        }
+
+        return festival;
     }
 
     private boolean isFestivalValid(JsonNode festivalNode) {
