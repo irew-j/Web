@@ -31,7 +31,7 @@ public class MyUserDetailsService implements UserDetailsService {
         }
         var user = result.get();
         List<GrantedAuthority> authorities = new ArrayList<>();
-        authorities.add(new SimpleGrantedAuthority("일반유저"));
+        authorities.add(new SimpleGrantedAuthority(user.getRole())); // DB에서 가져온 역할 사용
         var a = new CustomUser(user.getUsername(), user.getPassword(), authorities);
         a.displayName = user.getDisplayName();
         return a;

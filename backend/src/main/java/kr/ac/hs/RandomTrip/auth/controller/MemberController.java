@@ -1,6 +1,7 @@
 package kr.ac.hs.RandomTrip.auth.controller;
 
-import jakarta.servlet.http.Cookie;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import kr.ac.hs.RandomTrip.auth.dto.LoginRequestDto;
 import kr.ac.hs.RandomTrip.auth.dto.MemberDto;
@@ -9,79 +10,65 @@ import kr.ac.hs.RandomTrip.auth.security.CustomUser;
 import kr.ac.hs.RandomTrip.auth.security.JwtUtil;
 import kr.ac.hs.RandomTrip.auth.service.MemberService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import java.util.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
+@RequestMapping("/api/auth") // 기본 경로 추가
 @RequiredArgsConstructor
+@Tag(name = "Auth", description = "인증 및 회원 관련 API") // Tag 추가
 public class MemberController {
 
     private final MemberRepository memberRepository;
     private final MemberService memberService;
     private final AuthenticationManagerBuilder authenticationManagerBuilder;
+    private final JwtUtil jwtUtil;
 
-    @PostMapping("/members")
-    public void addMember(String username,
-                          String password,
-                          String displayName) throws Exception {
+    @PostMapping("/members") // 경로 변경
+    @Operation(summary = "회원가입", description = "새로운 회원을 등록합니다.")
+    public void addMember(@RequestParam String username,
+                          @RequestParam String password,
+                          @RequestParam String displayName) throws Exception {
         memberService.addMember(username, password, displayName);
     }
 
-    @GetMapping("/user/1")
-    @ResponseBody
-    public MemberDto user() {
-        var a = memberRepository.findById(1L);
-        var result = a.get();
-        var data = new MemberDto(result.getUsername(), result.getDisplayName());
-        return data;
-    }
-
     @PostMapping("/login")
-//    public Map<String, String> loginJWT(@RequestBody Map<String, String> data,
-//                                        HttpServletResponse response
+    @Operation(summary = "로그인", description = "사용자 인증 후 JWT 토큰을 발급합니다.")
     public Map<String, String> loginJWT(@RequestBody LoginRequestDto loginRequestDto,
                            HttpServletResponse response
     ) {
         var authToken = new UsernamePasswordAuthenticationToken(
-//                data.get("username"), data.get("password")
                 loginRequestDto.getUsername(), loginRequestDto.getPassword()
         );
         var auth = authenticationManagerBuilder.getObject().authenticate(authToken);
         SecurityContextHolder.getContext().setAuthentication(auth);
 
-        var jwt = JwtUtil.createToken(SecurityContextHolder.getContext().getAuthentication());
-//        System.out.println(jwt); 테스트용
-//        restapi에 쿠키 필요없음
-//        var cookie = new Cookie("jwt", jwt);
-//        cookie.setMaxAge(60*60); //jwt 유효기간이랑 비슷하게 or 더 길게 설정
-//        cookie.setHttpOnly(true);
-//        cookie.setPath("/"); //쿠키가 전송될 URL, /설정시 모든 사이트에 전송
-//        response.addCookie(cookie);
-//        return jwt;
+        var jwt = jwtUtil.createToken(SecurityContextHolder.getContext().getAuthentication());
         Map<String, String> tokenMap = new HashMap<>();
         tokenMap.put("token", jwt);
 
         return tokenMap;
     }
 
-
-//    @GetMapping("/my-page/jwt")
-//    @ResponseBody
-//    String myPageJWT(Authentication auth){
-//        var user = (CustomUser) auth.getPrincipal();
-//        System.out.println(user);
-//        System.out.println(user.displayName);
-//        System.out.println(user.getAuthorities());
-//        return "mypagedata";
-//    }
+    @PostMapping("/logout") // 경로 변경
+    @Operation(summary = "로그아웃", description = "현재 로그인된 사용자의 세션을 종료합니다.")
+    public ResponseEntity<String> logout() {
+        SecurityContextHolder.clearContext(); // SecurityContextHolder 초기화
+        return ResponseEntity.ok("로그아웃 성공");
+    }
 
     @GetMapping("/my-page")
+    @Operation(summary = "마이페이지 정보 조회", description = "현재 로그인된 사용자의 정보를 조회합니다.")
     @ResponseBody
     public MemberDto myPageJWT(Authentication auth) {
         var user = (CustomUser) auth.getPrincipal();
@@ -97,20 +84,4 @@ public class MemberController {
 
         return memberDto;
     }
-
-    //react 연결 test api
-    @RestController
-    public class HelloController {
-
-        @GetMapping("/api/hello")
-        public String hello() {
-            return "Hello from Spring Boot!";
-        }
-    }
-
-
-
-
 }
-
-

@@ -17,4 +17,5 @@ public class Member {
     private String username;
     private String displayName;
     private String password;
+    private String role;
 }

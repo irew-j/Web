@@ -3,20 +3,27 @@ package kr.ac.hs.RandomTrip.auth.security;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 
-
+@Component
+@RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
+
+    private final JwtUtil jwtUtil;
+
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -24,62 +31,46 @@ public class JwtFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+        final String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        //요청들어올때마다 실행할코드
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null){
-            filterChain.doFilter(request, response);
-            return;
-        }
+        String token = authorization.substring(7);
 
-        String jwtCookie = null;
-        for (Cookie cookie : cookies) {
-            if ("jwt".equals(cookie.getName())) {
-                jwtCookie = cookie.getValue();
-                break;
-            }
-        }
-
-        if (jwtCookie == null) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        Claims claim;
+        Claims claims;
         try {
-            claim = JwtUtil.extractToken(jwtCookie);
+            claims = jwtUtil.extractToken(token);
         } catch (Exception e) {
-            System.out.println("유효기간 만료되거나 이상함");
+            logger.warn("Invalid JWT Token", e);
             filterChain.doFilter(request, response);
             return;
         }
 
-        var arr = claim.get("authorities").toString().split(",");
-        var authorities = Arrays.stream(arr)
-                .map(a -> new SimpleGrantedAuthority(a)).toList();
+        var authorities = extractAuthorities(claims);
 
         var customUser = new CustomUser(
-                claim.get("username").toString(),
-                "none",
+                claims.get("username", String.class),
+                "", // 비밀번호는 인증 후에는 필요 없음
                 authorities
         );
-        customUser.displayName = claim.get("displayName").toString();
+        customUser.displayName = claims.get("displayName", String.class);
 
         var authToken = new UsernamePasswordAuthenticationToken(
                 customUser, null, authorities
         );
-        authToken.setDetails(new WebAuthenticationDetailsSource()
-                .buildDetails(request)
-        );
+        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authToken);
-
 
         filterChain.doFilter(request, response);
     }
 
-
+    private List<SimpleGrantedAuthority> extractAuthorities(Claims claims) {
+        String authoritiesStr = claims.get("authorities", String.class);
+        return Arrays.stream(authoritiesStr.split(","))
+                .map(SimpleGrantedAuthority::new)
+                .toList();
+    }
 }
