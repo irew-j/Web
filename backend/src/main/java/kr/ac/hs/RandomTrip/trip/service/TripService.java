@@ -288,27 +288,31 @@ public class TripService {
 
     // 축제 정보 조회 메서드 추가
     @Transactional(readOnly = true)
-    public List<TripResponse> getFestivalsByAreaCode(String areaCode) {
+    private List<TripResponse> getFestivalsByArea(String areaCode) {
         try {
             if (areaCode == null || areaCode.isEmpty()) {
                 return Collections.emptyList();
             }
 
-            JsonNode festivalItems = tourApiClient.searchFestivals(areaCode, 20); // 20개로 늘림
+            JsonNode festivalItems = tourApiClient.searchFestivals(areaCode, 10);
             List<TripResponse> festivals = new ArrayList<>();
 
             if (festivalItems.isArray() && festivalItems.size() > 0) {
+                // 모든 축제 정보를 가져오도록 수정 (기존에는 최대 2개만)
                 for (JsonNode festivalNode : festivalItems) {
+                    // 축제 기간 체크 (현재 날짜 이후인지 확인)
                     if (isFestivalValid(festivalNode)) {
-                        // 축제는 DB에 저장하지 않고 바로 변환하여 반환
-                        TripResponse festival = toFestivalTripResponse(festivalNode);
+                        TripResponse festival = destinationMapper.toFestivalTripResponse(festivalNode);
+                        // 좌표 보정 적용
+                        festival = correctFestivalCoordinates(festival);
                         festivals.add(festival);
                     }
                 }
             }
+
             return festivals;
         } catch (Exception e) {
-            System.err.println("Festival search failed: " + e.getMessage());
+            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -327,16 +331,29 @@ public class TripService {
         }
     }
 
-    // 축제 JsonNode를 TripResponse DTO로 변환하는 메서드
-    private TripResponse toFestivalTripResponse(JsonNode festivalNode) {
-        String title = festivalNode.path("title").asText("축제 정보 없음");
-        String address = festivalNode.path("addr1").asText("주소 없음");
-        String imageUrl = festivalNode.path("firstimage").asText("");
-        String mapx = festivalNode.path("mapx").asText("");
-        String mapy = festivalNode.path("mapy").asText("");
-        String areaCode = festivalNode.path("areacode").asText("");
-
-        // 축제는 ID가 없으므로 null로 설정
-        return new TripResponse(null, title, address, imageUrl, "", areaCode, "15", mapy, mapx);
+    public List<TripResponse> getFestivalsByAreaCode(String areaCode) {
+        try {
+            return getFestivalsByArea(areaCode);
+        } catch (Exception e) {
+            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
+            return Collections.singletonList(new TripResponse(
+                    "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
+            ));
+        }
     }
+
+    private TripResponse correctFestivalCoordinates(TripResponse festival) {
+        // "위대한 축구선수 100인 전" 데이터 보정
+        if ("위대한 축구선수 100인 전".equals(festival.getTitle()) &&
+                festival.getAddress() != null &&
+                festival.getAddress().contains("서울특별시 강서구 하늘길 38")) {
+
+            // 올바른 좌표로 보정 (김포공항 인근의 정확한 좌표)
+            festival.setMapy("37.5713695798026");  // 위도
+            festival.setMapx("126.802960133589");  // 경도
+        }
+
+        return festival;
+    }
+
 }
