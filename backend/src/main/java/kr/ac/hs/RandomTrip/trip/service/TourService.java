@@ -24,7 +24,7 @@ public class TourService {
     private final MemberRepository memberRepository;
     private final GeminiGuideGenerator guideGenerator;
 
-    private static final double MAX_DISTANCE_METERS = 50.0; // 50미터
+    private static final double MAX_DISTANCE_METERS = 100.0; // 100미터
 
     @Transactional(readOnly = true)
     public Optional<GuideResponse> getGuideForCurrentLocation(double lat, double lon) {
