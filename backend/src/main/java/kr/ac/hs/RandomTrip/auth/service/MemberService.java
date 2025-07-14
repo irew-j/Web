@@ -26,6 +26,7 @@ public class MemberService {
         var hash = passwordEncoder.encode(password);
         member.setPassword(hash);
         member.setDisplayName(displayName);
+        member.setRole("ROLE_USER"); // 기본 역할 부여
         memberRepository.save(member);
     }
 }

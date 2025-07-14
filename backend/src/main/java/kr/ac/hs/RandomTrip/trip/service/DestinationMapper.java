@@ -1,11 +1,12 @@
 package kr.ac.hs.RandomTrip.trip.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import kr.ac.hs.RandomTrip.trip.domain.Destination;
 import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.Map;
 
 @Component
 public class DestinationMapper {
@@ -35,103 +36,49 @@ public class DestinationMapper {
                 return entry.getValue();
             }
         }
-        return null;
+        return null; // Or throw an exception if an area code is always expected
     }
 
-    public List<JsonNode> filterByAreaCode(JsonNode items, String targetAreaCode) {
-        List<JsonNode> filtered = new ArrayList<>();
-        if (items.isArray() && items.size() > 0) {
-            for (JsonNode item : items) {
-                if (targetAreaCode == null || targetAreaCode.equals(item.path("areacode").asText(""))) {
-                    filtered.add(item);
-                }
-            }
-        }
-        return filtered;
-    }
-
-    public TripResponse toTripResponse(JsonNode selected) throws Exception {
-        String contentId = selected.path("contentid").asText("");
-        String contentTypeId = selected.path("contenttypeid").asText("");
-        String title = extractPlaceName(selected.path("title").asText("제목 없음"));
-        String addr1 = selected.path("addr1").asText("");
-        String addr2 = selected.path("addr2").asText("");
-        String address = addr1 + (addr2.isEmpty() ? "" : " " + addr2);
-        String areaCode = selected.path("areacode").asText("");
-        String sigunguCode = selected.path("sigungucode").asText("");
-        String mapy = selected.path("mapy").asText("");
-        String mapx = selected.path("mapx").asText("");
-        String imageUrl = selected.path("firstimage").asText("");
-        if (imageUrl.isEmpty()) imageUrl = selected.path("firstimage2").asText("");
-
-        // 상세 정보 가져오기
-        JsonNode detailItem = tourApiClient.fetchTourDetail(contentId, contentTypeId);
-        String description = "상세 설명 없음";
-        if (detailItem.isArray() && detailItem.size() > 0) {
-            description = detailItem.get(0).path("overview").asText("상세 설명 없음").replaceAll("<[^>]*>", "");
-            if (imageUrl.isEmpty()) imageUrl = detailItem.get(0).path("firstimage").asText("");
-            if (imageUrl.isEmpty()) imageUrl = detailItem.get(0).path("firstimage2").asText("");
-            if (address.isEmpty() || address.trim().equals("주소 없음")) {
-                addr1 = detailItem.get(0).path("addr1").asText("");
-                addr2 = detailItem.get(0).path("addr2").asText("");
-                address = addr1 + (addr2.isEmpty() ? "" : " " + addr2);
-            }
-            if (mapy.isEmpty()) mapy = detailItem.get(0).path("mapy").asText("");
-            if (mapx.isEmpty()) mapx = detailItem.get(0).path("mapx").asText("");
-        }
-
-//        // 이미지가 없는 경우 관광사진 정보 API 호출
-//        if (imageUrl.isEmpty()) {
-//            try {
-//                JsonNode imageItems = tourApiClient.fetchImageByKeyword(title);
-//                if (imageItems.isArray() && imageItems.size() > 0) {
-//                    imageUrl = imageItems.get(0).path("galWebImageUrl").asText("");
-//                }
-//            } catch (Exception e) {
-//                // 로그 추가 (디버깅용)
-//                System.err.println("Failed to fetch image for title: " + title + ", error: " + e.getMessage());
-//            }
-//        }
-
-        if (address.isEmpty() || address.trim().equals("주소 없음")) {
-            String areaName = getAreaNameFromCode(areaCode);
-            String sigunguName = getSigunguNameFromCode(areaCode, sigunguCode);
-            address = areaName + (sigunguName.isEmpty() ? "" : " " + sigunguName);
-            if (address.isEmpty()) address = "대한민국";
-        }
-
-        // 최종적으로 이미지가 없으면 값 비워둠
-        if (imageUrl.isEmpty()) {
-            imageUrl = "";
-        }
-
-        // reason을 포함한 생성자 대신 기본 생성자를 사용하고 이후에 필요시 reason 설정
+    // DB에 저장된 Destination 객체를 TripResponse DTO로 변환
+    public TripResponse toTripResponse(Destination destination) {
         return new TripResponse(
-                title, address.trim(), imageUrl, description, areaCode, contentTypeId, mapy, mapx
+                destination.getId(),
+                destination.getTitle(),
+                destination.getAddress(),
+                destination.getImageUrl(),
+                destination.getDescription(),
+                destination.getAreaCode(),
+                destination.getContentTypeId(),
+                destination.getMapy(),
+                destination.getMapx()
         );
     }
 
-    private String extractPlaceName(String title) {
-        if (title == null || title.isEmpty()) return "관광지";
-        String[] patterns = {"에서 누리는", "에서 즐기는", "에서 체험하는", "에서", "으로", "로 떠나는", "로",
-                "여행", "힐링", "관광", "체험", "즐길거리", "풍경", "명소", "추천"};
-        String result = title;
-        for (String pattern : patterns) {
-            int index = result.indexOf(pattern);
-            if (index > 0) result = result.substring(0, index).trim();
-        }
-        return result.length() <= 2 ? title : result;
+    // Kakao API 응답(JsonNode)을 Destination 객체로 변환 (ID는 아직 없음)
+    public Destination toDestination(JsonNode placeNode) {
+        String title = placeNode.path("place_name").asText();
+        String address = placeNode.path("address_name").asText();
+        String mapx = placeNode.path("x").asText();
+        String mapy = placeNode.path("y").asText();
+        // Kakao API는 contentId, contentTypeId, description, imageUrl이 없으므로 기본값/추가처리 필요
+        return new Destination(title, address, "", "", "", "", mapy, mapx, null);
+    }
+
+    // TourAPI 응답(JsonNode)을 Destination 객체로 변환 (ID는 아직 없음)
+    public Destination toDestination(JsonNode tourNode, String description, String imageUrl) {
+        String contentId = tourNode.path("contentid").asText();
+        String contentTypeId = tourNode.path("contenttypeid").asText();
+        String title = tourNode.path("title").asText("제목 없음");
+        String address = tourNode.path("addr1").asText("");
+        String areaCode = tourNode.path("areacode").asText();
+        String mapx = tourNode.path("mapx").asText();
+        String mapy = tourNode.path("mapy").asText();
+
+        return new Destination(title, address, imageUrl, description, areaCode, contentTypeId, mapy, mapx, contentId);
     }
 
     private String getAreaNameFromCode(String areaCode) {
         return areaCodeMap.getOrDefault(areaCode, "");
-    }
-
-    private String getSigunguNameFromCode(String areaCode, String sigunguCode) {
-        if (areaCode.equals("1") && sigunguCode.equals("1")) return "종로구";
-        if (areaCode.equals("1") && sigunguCode.equals("2")) return "중구";
-        if (areaCode.equals("6") && sigunguCode.equals("1")) return "중구";
-        return "";
     }
 
     public TripResponse toFestivalTripResponse(JsonNode festivalNode) throws Exception {

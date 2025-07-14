@@ -1,9 +1,12 @@
 package kr.ac.hs.RandomTrip.trip.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import kr.ac.hs.RandomTrip.trip.domain.Destination;
 import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequest;
 import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
+import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -17,29 +20,32 @@ public class TripService {
     private final KakaoApiClient kakaoApiClient;
     private final LlmTravelCourseExtractor llmTravelCourseExtractor;
     private final DestinationMapper destinationMapper;
+    private final DestinationRepository destinationRepository; // 주입
     private final Random random = new Random();
 
-    // 스레드 풀 생성 (장소 검색용)
-    private final ExecutorService executorService = Executors.newFixedThreadPool(8);
+    private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
     public TripService(TourApiClient tourApiClient, KakaoApiClient kakaoApiClient,
-                       LlmTravelCourseExtractor llmTravelCourseExtractor, DestinationMapper destinationMapper) {
+                       LlmTravelCourseExtractor llmTravelCourseExtractor, DestinationMapper destinationMapper,
+                       DestinationRepository destinationRepository) { // 주입
         this.tourApiClient = tourApiClient;
         this.kakaoApiClient = kakaoApiClient;
         this.llmTravelCourseExtractor = llmTravelCourseExtractor;
         this.destinationMapper = destinationMapper;
+        this.destinationRepository = destinationRepository; // 주입
     }
 
+    @Transactional
     public TripResponse getRandomDestination() {
         try {
             String[] allowedContentTypes = {"12", "14", "25", "28"}; // 관광지, 문화시설, 여행코스, 레포츠
-            int maxRetries = 10;
+            int maxRetries = 10; // 최대 재시도 횟수
 
             for (int i = 0; i < maxRetries; i++) {
-                int randomPage = random.nextInt(100) + 1;
-                JsonNode items = tourApiClient.fetchAreaBasedList(randomPage, 10);
+                int randomPage = random.nextInt(100) + 1; // 1부터 100까지 랜덤 페이지
+                JsonNode items = tourApiClient.fetchAreaBasedList(randomPage, 10); // 10개 항목 가져오기
 
-                if (items.isArray()) {
+                if (items.isArray() && items.size() > 0) {
                     List<JsonNode> filtered = new ArrayList<>();
                     for (JsonNode item : items) {
                         String contentTypeId = item.path("contenttypeid").asText();
@@ -50,84 +56,81 @@ public class TripService {
 
                     if (!filtered.isEmpty()) {
                         JsonNode selected = filtered.get(random.nextInt(filtered.size()));
-                        return destinationMapper.toTripResponse(selected);
+                        String contentId = selected.path("contentid").asText();
+                        
+                        // DB에서 찾아보고 없으면 새로 저장
+                        Destination destination = destinationRepository.findByContentId(contentId)
+                                .orElseGet(() -> {
+                                    try {
+                                        JsonNode detailItem = tourApiClient.fetchTourDetail(contentId, selected.path("contenttypeid").asText());
+                                        String description = "";
+                                        if (detailItem.isArray() && detailItem.size() > 0) {
+                                            description = detailItem.get(0).path("overview").asText("").replaceAll("<[^>]*>", "");
+                                        }
+                                        String imageUrl = selected.path("firstimage").asText("");
+                                        if (imageUrl.isEmpty()) imageUrl = selected.path("firstimage2").asText("");
+
+                                        Destination newDest = destinationMapper.toDestination(selected, description, imageUrl);
+                                        return destinationRepository.save(newDest);
+                                    } catch (Exception e) {
+                                        System.err.println("랜덤 관광지 상세정보 조회 또는 저장 실패: " + e.getMessage());
+                                        return null;
+                                    }
+                                });
+
+                        if (destination != null) {
+                            return destinationMapper.toTripResponse(destination);
+                        }
                     }
                 }
             }
-
-            return new TripResponse("조건에 맞는 관광지 정보가 없습니다.", "", "", "", "", "", Collections.emptyList().toString(), "", "");
+            System.err.println("랜덤 관광지 검색 실패: 조건에 맞는 관광지 정보를 찾을 수 없습니다.");
+            return new TripResponse(); // 실패 시 빈 TripResponse 반환
         } catch (Exception e) {
-            return new TripResponse("API 호출 오류", "", "", e.getMessage(), "", "", Collections.emptyList().toString(), "", "");
+            System.err.println("getRandomDestination API 호출 오류: " + e.getMessage());
+            return new TripResponse(); // 오류 발생 시 빈 TripResponse 반환
         }
     }
 
+    @Transactional
     public List<List<TripResponse>> recommendTrip(TripRecommendRequest request, String transport) {
         try {
             String targetAreaCode = destinationMapper.resolveAreaCode(request.getQuery());
             String regionName = getRegionNameFromQuery(request.getQuery());
 
-            // transport 인자를 LLM 호출에 추가
             List<List<LlmTravelCourseExtractor.TravelCourseItem>> allCourseItems =
                     llmTravelCourseExtractor.extractTravelCourse(request.getQuery(), transport);
 
             if (allCourseItems.isEmpty()) {
-                return Collections.singletonList(Collections.singletonList(new TripResponse(
-                        "코스 생성 실패", "", "", "여행 코스를 생성할 수 없습니다.", "", "", "", ""
-                )));
+                return Collections.emptyList();
             }
 
-            // 각 코스 처리
             List<CompletableFuture<List<TripResponse>>> courseFutures = allCourseItems.stream()
                     .map(courseItems -> processCourseConcurrently(courseItems, targetAreaCode, regionName))
                     .collect(Collectors.toList());
 
-            CompletableFuture<Void> allCourses = CompletableFuture.allOf(
-                    courseFutures.toArray(new CompletableFuture[0])
-            );
+            CompletableFuture<Void> allCourses = CompletableFuture.allOf(courseFutures.toArray(new CompletableFuture[0]));
 
-            List<List<TripResponse>> results = allCourses.thenApply(v ->
+            return allCourses.thenApply(v ->
                     courseFutures.stream()
                             .map(CompletableFuture::join)
                             .filter(course -> !course.isEmpty())
                             .collect(Collectors.toList())
             ).get();
 
-            if (results.isEmpty()) {
-                return Collections.singletonList(Collections.singletonList(new TripResponse(
-                        "추천 실패", "", "", "코스에 맞는 여행지를 찾을 수 없습니다.", "", "", "", ""
-                )));
-            }
-
-            return results;
-
         } catch (Exception e) {
-            return Collections.singletonList(Collections.singletonList(new TripResponse(
-                    "추천 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
-            )));
+            System.err.println("Recommend trip failed: " + e.getMessage());
+            return Collections.emptyList();
         }
     }
 
-    // 축제 정보 조회를 위한 별도 메서드
-    public List<TripResponse> getFestivals(String query) {
-        try {
-            String targetAreaCode = destinationMapper.resolveAreaCode(query);
-            return getFestivalsByArea(targetAreaCode);
-        } catch (Exception e) {
-            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
-            return Collections.singletonList(new TripResponse(
-                    "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
-            ));
-        }
-    }
-
-    // 코스 내 장소들을 병렬로 처리
     private CompletableFuture<List<TripResponse>> processCourseConcurrently(
             List<LlmTravelCourseExtractor.TravelCourseItem> courseItems,
             String targetAreaCode, String regionName) {
 
         List<CompletableFuture<TripResponse>> placeFutures = courseItems.stream()
                 .map(item -> CompletableFuture.supplyAsync(() ->
-                                searchPlaceFromBothApis(item.getPlace(), targetAreaCode, regionName, item.getReason()),
+                                searchAndSavePlace(item.getPlace(), targetAreaCode, regionName, item.getReason()),
                         executorService
                 ))
                 .collect(Collectors.toList());
@@ -138,45 +141,80 @@ public class TripService {
                             .map(CompletableFuture::join)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toList());
-
-                    return tripResponses.isEmpty()
-                            ? Collections.singletonList(new TripResponse(
-                            "검색 결과 없음", "", "", "코스에 맞는 여행지를 찾을 수 없습니다.", "", "", "", ""
-                    ))
-                            : optimizeRoute(tripResponses);
+                    return optimizeRoute(tripResponses);
                 });
     }
 
-    // 개선된 장소 검색 (타임아웃 추가)
-    private TripResponse searchPlaceFromBothApis(String placeName, String targetAreaCode, String regionName, String reason) {
+    @Transactional
+    public TripResponse searchAndSavePlace(String placeName, String targetAreaCode, String regionName, String reason) {
+        // 1. TourAPI 우선 검색
         try {
-            String[] allowedContentTypes = {"12", "14", "25", "28"};
+            JsonNode tourItems = tourApiClient.searchByKeyword(placeName, targetAreaCode, 1, new String[]{"12", "14", "25", "28"});
+            if (tourItems.isArray() && tourItems.size() > 0) {
+                JsonNode tourNode = tourItems.get(0);
+                String contentId = tourNode.path("contentid").asText();
+                if (contentId != null && !contentId.isEmpty()) {
+                    // contentId가 있으면 DB에서 찾아보고, 없으면 새로 만들어 저장 (findOrCreate)
+                    Destination destination = destinationRepository.findByContentId(contentId)
+                            .orElseGet(() -> {
+                                try {
+                                    JsonNode detailItem = tourApiClient.fetchTourDetail(contentId, tourNode.path("contenttypeid").asText());
+                                    String description = "";
+                                    if (detailItem.isArray() && detailItem.size() > 0) {
+                                        description = detailItem.get(0).path("overview").asText("").replaceAll("<[^>]*>", "");
+                                    }
+                                    String imageUrl = tourNode.path("firstimage").asText("");
+                                    if (imageUrl.isEmpty()) imageUrl = tourNode.path("firstimage2").asText("");
 
-            // 1. Tour API 검색 (타임아웃 단축)
-            JsonNode tourItems = tourApiClient.searchByKeyword(placeName, targetAreaCode, 5, allowedContentTypes); // numOfRows 줄임
-            List<JsonNode> filteredItems = destinationMapper.filterByAreaCode(tourItems, targetAreaCode);
+                                    Destination newDest = destinationMapper.toDestination(tourNode, description, imageUrl);
+                                    return destinationRepository.save(newDest);
+                                } catch (Exception e) {
+                                    System.err.println("TourAPI 상세정보 조회 또는 저장 실패 (place: " + placeName + "): " + e.getMessage());
+                                    return null; // 실패 시 null 반환
+                                }
+                            });
 
-            if (!filteredItems.isEmpty()) {
-                JsonNode selected = filteredItems.get(0); // 랜덤 대신 첫 번째 결과 사용
-                TripResponse trip = destinationMapper.toTripResponse(selected);
-                trip.setReason(reason);
-                return trip;
+                    if (destination != null) {
+                        TripResponse response = destinationMapper.toTripResponse(destination);
+                        response.setReason(reason);
+                        return response; // 성공적으로 TourAPI 정보를 찾았으므로 반환
+                    }
+                }
             }
+        } catch (Exception e) {
+            System.err.println("TourAPI 키워드 검색 실패 (place: " + placeName + "): " + e.getMessage());
+            // 실패 시 아래 카카오 로직으로 넘어감
+        }
 
-            // 2. Kakao API 검색 (백업)
+        // 2. TourAPI에서 못찾았거나 실패하면 KakaoAPI로 검색
+        try {
             JsonNode kakaoPlaces = kakaoApiClient.searchPlaces(placeName, regionName);
             if (kakaoPlaces.isArray() && kakaoPlaces.size() > 0) {
-                return kakaoApiClient.toTripResponse(kakaoPlaces.get(0), reason);
+                JsonNode placeNode = kakaoPlaces.get(0);
+                String title = placeNode.path("place_name").asText();
+
+                // title로 DB 조회 후 없으면 생성
+                List<Destination> existingDestinations = destinationRepository.findByTitle(title);
+                Destination destination;
+                if (!existingDestinations.isEmpty()) {
+                    destination = existingDestinations.get(0); // 첫 번째 결과 사용
+                } else {
+                    Destination newDest = destinationMapper.toDestination(placeNode);
+                    destination = destinationRepository.save(newDest);
+                }
+
+                TripResponse response = destinationMapper.toTripResponse(destination);
+                response.setReason(reason);
+                return response;
             }
-
-            return null;
-
         } catch (Exception e) {
-            System.err.println("장소 검색 중 오류 발생 (" + placeName + "): " + e.getMessage());
-            return null;
+            System.err.println("KakaoAPI 검색 또는 저장 실패 (place: " + placeName + "): " + e.getMessage());
         }
+
+        return null; // 최종적으로 모든 API에서 장소를 찾지 못한 경우
     }
 
+    // ... (getRegionNameFromQuery, optimizeRoute, distance 등 나머지 메서드는 거의 동일) 
     private String getRegionNameFromQuery(String query) {
         Map<String, String> regionMap = new HashMap<>();
         regionMap.put("서울", "서울");
@@ -213,11 +251,9 @@ public class TripService {
         List<TripResponse> route = new ArrayList<>();
         List<TripResponse> unvisited = new ArrayList<>(points);
 
-        // 첫 번째 장소(대표 장소)를 고정
         TripResponse current = unvisited.remove(0);
         route.add(current);
 
-        // 나머지 장소들만 최적화
         while (!unvisited.isEmpty()) {
             TripResponse finalCurrent = current;
             TripResponse next = unvisited.stream()
@@ -250,7 +286,8 @@ public class TripService {
         }
     }
 
-    // 축제 정보 조회 메서드 (기존 코드와 동일)
+    // 축제 정보 조회 메서드 추가
+    @Transactional(readOnly = true)
     private List<TripResponse> getFestivalsByArea(String areaCode) {
         try {
             if (areaCode == null || areaCode.isEmpty()) {
@@ -266,10 +303,8 @@ public class TripService {
                     // 축제 기간 체크 (현재 날짜 이후인지 확인)
                     if (isFestivalValid(festivalNode)) {
                         TripResponse festival = destinationMapper.toFestivalTripResponse(festivalNode);
-
                         // 좌표 보정 적용
                         festival = correctFestivalCoordinates(festival);
-
                         festivals.add(festival);
                     }
                 }
@@ -282,7 +317,31 @@ public class TripService {
         }
     }
 
-    // 특정 축제 데이터의 좌표 보정 메서드 추가
+    private boolean isFestivalValid(JsonNode festivalNode) {
+        try {
+            String eventEndDate = festivalNode.path("eventenddate").asText("");
+            if (eventEndDate.isEmpty()) return true; // 종료일 없으면 유효 처리
+
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
+            java.time.LocalDate endDate = java.time.LocalDate.parse(eventEndDate, formatter);
+            return !endDate.isBefore(today);
+        } catch (Exception e) {
+            return true; // 날짜 파싱 오류 시 일단 유효한 것으로 간주
+        }
+    }
+
+    public List<TripResponse> getFestivalsByAreaCode(String areaCode) {
+        try {
+            return getFestivalsByArea(areaCode);
+        } catch (Exception e) {
+            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
+            return Collections.singletonList(new TripResponse(
+                    "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
+            ));
+        }
+    }
+
     private TripResponse correctFestivalCoordinates(TripResponse festival) {
         // "위대한 축구선수 100인 전" 데이터 보정
         if ("위대한 축구선수 100인 전".equals(festival.getTitle()) &&
@@ -297,38 +356,4 @@ public class TripService {
         return festival;
     }
 
-    private boolean isFestivalValid(JsonNode festivalNode) {
-        try {
-            String eventStartDate = festivalNode.path("eventstartdate").asText("");
-            String eventEndDate = festivalNode.path("eventenddate").asText("");
-
-            java.time.LocalDate today = java.time.LocalDate.now();
-            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
-
-            // 종료일이 있는 경우 종료일 기준으로, 없으면 시작일 기준으로 체크
-            if (!eventEndDate.isEmpty()) {
-                java.time.LocalDate endDate = java.time.LocalDate.parse(eventEndDate, formatter);
-                return !endDate.isBefore(today);
-            } else if (!eventStartDate.isEmpty()) {
-                java.time.LocalDate startDate = java.time.LocalDate.parse(eventStartDate, formatter);
-                return !startDate.isBefore(today);
-            }
-
-            return true; // 날짜 정보가 없으면 일단 유효한 것으로 간주
-        } catch (Exception e) {
-            return true; // 파싱 오류 시 유효한 것으로 간주
-        }
-    }
-
-    // areaCode를 직접 받는 메서드 추가
-    public List<TripResponse> getFestivalsByAreaCode(String areaCode) {
-        try {
-            return getFestivalsByArea(areaCode);
-        } catch (Exception e) {
-            System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
-            return Collections.singletonList(new TripResponse(
-                    "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
-            ));
-        }
-    }
 }

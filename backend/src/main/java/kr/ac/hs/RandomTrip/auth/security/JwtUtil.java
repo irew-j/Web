@@ -4,6 +4,8 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
@@ -14,33 +16,36 @@ import java.util.stream.Collectors;
 @Component
 public class JwtUtil {
 
-    static final SecretKey key =
-            Keys.hmacShaKeyFor(Decoders.BASE64.decode(
-                    "asdjfklasjdfwnerwqj123nwltjjrwlj32jjwklnsakdjfkjas"
-            ));
+    @Value("${jwt.secret}")
+    private String secret;
+
+    private SecretKey key;
+
+    @PostConstruct
+    public void init() {
+        this.key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
+    }
 
     // JWT 만들어주는 함수
-    public static String createToken(Authentication auth) {
+    public String createToken(Authentication auth) {
         var user = (CustomUser) auth.getPrincipal();
-        var authorities = auth.getAuthorities().stream().map(a -> a.getAuthority())
+        var authorities = auth.getAuthorities().stream()
+                .map(a -> a.getAuthority())
                 .collect(Collectors.joining(","));
 
-        String jwt = Jwts.builder()
+        return Jwts.builder()
                 .claim("username", user.getUsername())
                 .claim("displayName", user.displayName)
                 .claim("authorities", authorities)
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60)) //유효기간 1시간/ ms 단위
+                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60)) //유효기간 1시간
                 .signWith(key)
                 .compact();
-        return jwt;
     }
 
     // JWT를 파라미터로 입력하면 개봉하는 함수
-    public static Claims extractToken(String token) {
-        Claims claims = Jwts.parser().verifyWith(key).build()
+    public Claims extractToken(String token) {
+        return Jwts.parser().verifyWith(key).build()
                 .parseSignedClaims(token).getPayload();
-        return claims;
     }
-
 }
