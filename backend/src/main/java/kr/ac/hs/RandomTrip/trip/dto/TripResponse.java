@@ -16,13 +16,14 @@ public class TripResponse {
     private String contentTypeId;
     private String mapy;
     private String mapx;
+    private String festivalPeriod; // 축제 기간
 
     public TripResponse() {
     }
 
     // 전체 필드 생성자
     public TripResponse(Long id, String title, String address, String imageUrl, String description,
-                        String areaCode, String contentTypeId, String mapy, String mapx) {
+                        String areaCode, String contentTypeId, String mapy, String mapx, String festivalPeriod) {
         this.id = id;
         this.title = title;
         this.address = address;
@@ -32,11 +33,12 @@ public class TripResponse {
         this.contentTypeId = contentTypeId;
         this.mapy = mapy;
         this.mapx = mapx;
+        this.festivalPeriod = festivalPeriod;
     }
 
     // 기존 생성자 호환성을 위해 남겨둠 (id가 없는 경우)
     public TripResponse(String title, String address, String imageUrl, String description,
                         String areaCode, String contentTypeId, String mapy, String mapx) {
-        this(null, title, address, imageUrl, description, areaCode, contentTypeId, mapy, mapx);
+        this(null, title, address, imageUrl, description, areaCode, contentTypeId, mapy, mapx, null);
     }
 }

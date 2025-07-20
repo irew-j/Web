@@ -44,7 +44,6 @@ public class SecurityConfig {
         http.authorizeHttpRequests((authorize) -> authorize
                 .requestMatchers("/", "/login", "/members", "/swagger-ui/**", "/v3/api-docs/**", "/api/hello").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/tour/guide").permitAll()
                 .requestMatchers("/api/tour/**", "/my-page", "/api/auth/logout").hasRole("USER")
                 .anyRequest().permitAll() // 나머지 요청은 일단 허용
         );

@@ -38,6 +38,8 @@ public class Destination {
     @Column(unique = true) // TourAPI contentId, 중복 저장 방지
     private String contentId;
 
+    private String festivalPeriod; // 축제 기간 (예: "2024.07.20 ~ 2024.08.15")
+
     // 전체 필드 생성자
     public Destination(String title, String address, String imageUrl, String description, String areaCode, String contentTypeId, String mapy, String mapx, String contentId) {
         this.title = title;
