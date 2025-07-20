@@ -286,8 +286,7 @@ public class TripService {
         }
     }
 
-    // 축제 정보 조회 메서드 추가
-    @Transactional(readOnly = true)
+    @Transactional
     private List<TripResponse> getFestivalsByArea(String areaCode) {
         try {
             if (areaCode == null || areaCode.isEmpty()) {
@@ -298,14 +297,47 @@ public class TripService {
             List<TripResponse> festivals = new ArrayList<>();
 
             if (festivalItems.isArray() && festivalItems.size() > 0) {
-                // 모든 축제 정보를 가져오도록 수정 (기존에는 최대 2개만)
                 for (JsonNode festivalNode : festivalItems) {
-                    // 축제 기간 체크 (현재 날짜 이후인지 확인)
                     if (isFestivalValid(festivalNode)) {
-                        TripResponse festival = destinationMapper.toFestivalTripResponse(festivalNode);
-                        // 좌표 보정 적용
-                        festival = correctFestivalCoordinates(festival);
-                        festivals.add(festival);
+                        String contentId = festivalNode.path("contentid").asText();
+                        Optional<Destination> existingOpt = destinationRepository.findByContentId(contentId);
+
+                        Destination finalDestination = existingOpt.map(dest -> {
+                            // 이미 존재할 경우, festivalPeriod가 비어있으면 업데이트
+                            if (dest.getFestivalPeriod() == null || dest.getFestivalPeriod().isEmpty()) {
+                                String eventStartDate = festivalNode.path("eventstartdate").asText("");
+                                String eventEndDate = festivalNode.path("eventenddate").asText("");
+                                dest.setFestivalPeriod(formatFestivalPeriod(eventStartDate, eventEndDate));
+                                return destinationRepository.save(dest);
+                            }
+                            return dest;
+                        }).orElseGet(() -> {
+                            // 존재하지 않으면 새로 생성
+                            try {
+                                JsonNode detailItem = tourApiClient.fetchTourDetail(contentId, "15");
+                                String description = (detailItem.isArray() && detailItem.size() > 0) ?
+                                        detailItem.get(0).path("overview").asText("").replaceAll("<[^>]*>", "") : "";
+                                String imageUrl = festivalNode.path("firstimage").asText("");
+                                if (imageUrl.isEmpty()) imageUrl = festivalNode.path("firstimage2").asText("");
+
+                                Destination newDest = destinationMapper.toDestination(festivalNode, description, imageUrl);
+
+                                String eventStartDate = festivalNode.path("eventstartdate").asText("");
+                                String eventEndDate = festivalNode.path("eventenddate").asText("");
+                                newDest.setFestivalPeriod(formatFestivalPeriod(eventStartDate, eventEndDate));
+
+                                return destinationRepository.save(newDest);
+                            } catch (Exception e) {
+                                System.err.println("축제 상세정보 조회 또는 저장 실패: " + e.getMessage());
+                                return null;
+                            }
+                        });
+
+                        if (finalDestination != null) {
+                            TripResponse festival = destinationMapper.toTripResponse(finalDestination);
+                            festival = correctFestivalCoordinates(festival);
+                            festivals.add(festival);
+                        }
                     }
                 }
             }
@@ -354,6 +386,36 @@ public class TripService {
         }
 
         return festival;
+    }
+
+    private String formatFestivalPeriod(String startDate, String endDate) {
+        try {
+            if (startDate.isEmpty() && endDate.isEmpty()) {
+                return "";
+            }
+
+            java.time.format.DateTimeFormatter inputFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
+            java.time.format.DateTimeFormatter outputFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy.MM.dd");
+
+            if (!startDate.isEmpty() && !endDate.isEmpty()) {
+                java.time.LocalDate start = java.time.LocalDate.parse(startDate, inputFormatter);
+                java.time.LocalDate end = java.time.LocalDate.parse(endDate, inputFormatter);
+
+                if (start.equals(end)) {
+                    return start.format(outputFormatter);
+                } else {
+                    return start.format(outputFormatter) + " ~ " + end.format(outputFormatter);
+                }
+            } else if (!startDate.isEmpty()) {
+                java.time.LocalDate start = java.time.LocalDate.parse(startDate, inputFormatter);
+                return start.format(outputFormatter) + " ~";
+            } else {
+                java.time.LocalDate end = java.time.LocalDate.parse(endDate, inputFormatter);
+                return "~ " + end.format(outputFormatter);
+            }
+        } catch (Exception e) {
+            return "";
+        }
     }
 
 }

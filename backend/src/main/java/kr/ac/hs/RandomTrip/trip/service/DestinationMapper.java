@@ -50,7 +50,8 @@ public class DestinationMapper {
                 destination.getAreaCode(),
                 destination.getContentTypeId(),
                 destination.getMapy(),
-                destination.getMapx()
+                destination.getMapx(),
+                destination.getFestivalPeriod() // 축제 기간 매핑 추가
         );
     }
 
@@ -81,77 +82,5 @@ public class DestinationMapper {
         return areaCodeMap.getOrDefault(areaCode, "");
     }
 
-    public TripResponse toFestivalTripResponse(JsonNode festivalNode) throws Exception {
-        String contentId = festivalNode.path("contentid").asText("");
-        String contentTypeId = "15"; // 축제/행사 고정
-        String title = festivalNode.path("title").asText("축제 정보 없음");
-        String addr1 = festivalNode.path("addr1").asText("");
-        String addr2 = festivalNode.path("addr2").asText("");
-        String address = addr1 + (addr2.isEmpty() ? "" : " " + addr2);
-        String areaCode = festivalNode.path("areacode").asText("");
-        String mapy = festivalNode.path("mapy").asText("");
-        String mapx = festivalNode.path("mapx").asText("");
-        String imageUrl = festivalNode.path("firstimage").asText("");
-        if (imageUrl.isEmpty()) imageUrl = festivalNode.path("firstimage2").asText("");
-
-        // 축제 기간 정보 추출
-        String eventStartDate = festivalNode.path("eventstartdate").asText("");
-        String eventEndDate = festivalNode.path("eventenddate").asText("");
-        String festivalPeriod = formatFestivalPeriod(eventStartDate, eventEndDate);
-
-        // 상세 정보 가져오기
-        JsonNode detailItem = tourApiClient.fetchTourDetail(contentId, contentTypeId);
-        String description = "축제 상세 설명 없음";
-        if (detailItem.isArray() && detailItem.size() > 0) {
-            description = detailItem.get(0).path("overview").asText("축제 상세 설명 없음").replaceAll("<[^>]*>", "");
-            if (imageUrl.isEmpty()) imageUrl = detailItem.get(0).path("firstimage").asText("");
-            if (imageUrl.isEmpty()) imageUrl = detailItem.get(0).path("firstimage2").asText("");
-        }
-
-        // 축제 기간 정보를 description에 추가
-        if (!festivalPeriod.isEmpty()) {
-            description = "🎉 축제 기간: " + festivalPeriod + "\n\n" + description;
-        }
-
-        if (address.isEmpty() || address.trim().equals("주소 없음")) {
-            String areaName = getAreaNameFromCode(areaCode);
-            address = areaName.isEmpty() ? "대한민국" : areaName;
-        }
-
-        TripResponse response = new TripResponse(title, address.trim(), imageUrl, description, areaCode, contentTypeId, mapy, mapx);
-        // 임시로 채워넣음
-        response.setReason("🎪 이 지역에서 열리는 특별한 축제입니다!");
-
-        return response;
-    }
-
-    private String formatFestivalPeriod(String startDate, String endDate) {
-        try {
-            if (startDate.isEmpty() && endDate.isEmpty()) {
-                return "";
-            }
-
-            java.time.format.DateTimeFormatter inputFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
-            java.time.format.DateTimeFormatter outputFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy.MM.dd");
-
-            if (!startDate.isEmpty() && !endDate.isEmpty()) {
-                java.time.LocalDate start = java.time.LocalDate.parse(startDate, inputFormatter);
-                java.time.LocalDate end = java.time.LocalDate.parse(endDate, inputFormatter);
-
-                if (start.equals(end)) {
-                    return start.format(outputFormatter);
-                } else {
-                    return start.format(outputFormatter) + " ~ " + end.format(outputFormatter);
-                }
-            } else if (!startDate.isEmpty()) {
-                java.time.LocalDate start = java.time.LocalDate.parse(startDate, inputFormatter);
-                return start.format(outputFormatter) + " ~";
-            } else {
-                java.time.LocalDate end = java.time.LocalDate.parse(endDate, inputFormatter);
-                return "~ " + end.format(outputFormatter);
-            }
-        } catch (Exception e) {
-            return "";
-        }
-    }
+    
 }
