@@ -42,7 +42,7 @@ public class SecurityConfig {
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         http.authorizeHttpRequests((authorize) -> authorize
-                .requestMatchers("/", "/login", "/members", "/swagger-ui/**", "/v3/api-docs/**", "/api/hello").permitAll()
+                .requestMatchers("/", "/login", "/members", "/swagger-ui/**", "/v3/api-docs/**", "/api/hello", "/ws-guide/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/tour/**", "/my-page", "/api/auth/logout").hasRole("USER")
                 .anyRequest().permitAll() // 나머지 요청은 일단 허용
@@ -65,4 +65,5 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
+
 }
