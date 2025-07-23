@@ -1,6 +1,7 @@
 package kr.ac.hs.RandomTrip.auth.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,10 +51,10 @@ public class JwtFilter extends OncePerRequestFilter {
         Claims claims;
         try {
             claims = jwtUtil.extractToken(token);
-        } catch (Exception e) {
-            logger.warn("Invalid JWT Token", e);
-            filterChain.doFilter(request, response);
-            return;
+        } catch (JwtException e) { // JwtException으로 변경
+            logger.warn("Invalid JWT Token", e); // 로그 메시지 개선
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); // 401 Unauthorized 설정
+            return; // 필터 체인 중단
         }
 
         var authorities = extractAuthorities(claims);
