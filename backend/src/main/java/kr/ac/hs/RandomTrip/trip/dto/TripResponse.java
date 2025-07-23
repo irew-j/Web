@@ -41,4 +41,18 @@ public class TripResponse {
                         String areaCode, String contentTypeId, String mapy, String mapx) {
         this(null, title, address, imageUrl, description, areaCode, contentTypeId, mapy, mapx, null);
     }
+
+    // Destination 엔티티를 TripResponse DTO로 변환하는 생성자
+    public TripResponse(kr.ac.hs.RandomTrip.trip.domain.Destination destination) {
+        this.id = destination.getId();
+        this.title = destination.getTitle();
+        this.address = destination.getAddress();
+        this.imageUrl = destination.getImageUrl();
+        this.description = destination.getDescription();
+        this.areaCode = destination.getAreaCode();
+        this.contentTypeId = destination.getContentTypeId();
+        this.mapy = destination.getMapy();
+        this.mapx = destination.getMapx();
+        this.festivalPeriod = destination.getFestivalPeriod();
+    }
 }

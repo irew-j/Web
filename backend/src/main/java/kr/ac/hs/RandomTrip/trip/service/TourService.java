@@ -6,6 +6,8 @@ import kr.ac.hs.RandomTrip.trip.domain.Destination;
 import kr.ac.hs.RandomTrip.trip.domain.Visit;
 import kr.ac.hs.RandomTrip.trip.dto.GuideResponse;
 import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
+import kr.ac.hs.RandomTrip.trip.domain.ItineraryItem;
+import kr.ac.hs.RandomTrip.trip.repository.ItineraryItemRepository;
 import kr.ac.hs.RandomTrip.trip.repository.VisitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,8 +25,9 @@ public class TourService {
     private final VisitRepository visitRepository;
     private final MemberRepository memberRepository;
     private final GeminiGuideGenerator guideGenerator;
+    private final ItineraryItemRepository itineraryItemRepository;
 
-    private static final double MAX_DISTANCE_METERS = 100.0; // 100미터
+    private static final double MAX_DISTANCE_METERS = 500.0; // 500미터
 
     @Transactional(readOnly = true)
     public Optional<GuideResponse> getGuideForCurrentLocation(double lat, double lon) {
@@ -56,13 +59,19 @@ public class TourService {
 
         if (distance <= MAX_DISTANCE_METERS) {
             String username = SecurityContextHolder.getContext().getAuthentication().getName();
-            Optional<Member> memberOpt = memberRepository.findByUsername(username);
-            if (memberOpt.isEmpty()) {
-                // 로그인한 사용자를 찾을 수 없는 경우
-                return false;
-            }
-            Visit visit = new Visit(memberOpt.get(), destination);
+            Member member = memberRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // 기존 Visit 기록 저장
+            Visit visit = new Visit(member, destination);
             visitRepository.save(visit);
+
+            // 일정 항목(ItineraryItem)의 방문 상태 업데이트
+            List<ItineraryItem> itemsToUpdate = itineraryItemRepository.findByDestination_IdAndItinerary_Member_Username(destinationId, username);
+            for (ItineraryItem item : itemsToUpdate) {
+                item.setVisited(true);
+            }
+
             return true;
         } else {
             return false;
