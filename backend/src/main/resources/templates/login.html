@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <link href="/main.css" rel="stylesheet">
+
+</head>
+<body>
+<div th:replace="~{nav.html::navbar}"></div>
+
+<h4>로그인 페이지</h4>
+
+<div th:if="${param.error}">
+  <h4>아이디나 비번 틀림</h4>
+</div>
+
+<form action="/login" method="POST">
+  <input name="username">
+  <input name="password" type="password">
+  <button type="submit">전송</button>
+</form>
+<h4>JWT 로그인 테스트</h4>
+<form>
+  <input name="username" id="username">
+  <input name="password" type="password" id="password">
+</form>
+
+<button onclick="loginJWT()">전송</button>
+<script>
+  function loginJWT(){
+    fetch('/login/jwt', {
+      method : 'POST',
+      headers : {'Content-Type': 'application/json'},
+      body : JSON.stringify({
+        username : document.querySelector('#username').value,
+        password : document.querySelector('#password').value
+      })
+    }).then(r => r.text()).then((r)=>{ console.log(r) })
+  }
+
+</script>
+
+<button onclick="getMyPage()">JWT 마이페이지 요청 버튼</button>
+<script>
+  function getMyPage() {
+    fetch('/my-page/jwt')
+      .then((r) => r.text())
+      .then((r) => {
+        console.log(r)
+      });
+  }
+</script>
+
+
+
+</body>
+</html>
