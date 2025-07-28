@@ -20,21 +20,11 @@ dist-ssr/
 
 frontend/.env
 
-# 에디터 및 OS 관련
-.vscode/
-!.vscode/extensions.json
-.idea/
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.evn
 
 # ======= Backend (Spring Boot, Java) =======
 # 로그 파일
 *.log
+
 
 # 빌드 결과물
 build/
@@ -51,43 +41,7 @@ application-*.yml
 backend/src/main/resources/application.properties
 backend/src/main/resources/application-*.properties
 
-# Gradle 관련
-.gradle/
-gradle-wrapper.jar
-.mvn/
-
-# STS, Eclipse, IntelliJ IDEA 관련 설정
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
 .idea/
-*.iws
-*.iml
-*.ipr
+backend/.gradle/
 
-# Maven Wrapper
-.mvn/
 
-# 기타
-*.class
-*.jar
-*.war
-
-# NetBeans
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-# VS Code
-.vscode/
-
-# OS별 불필요 파일
-.DS_Store
-Thumbs.db
