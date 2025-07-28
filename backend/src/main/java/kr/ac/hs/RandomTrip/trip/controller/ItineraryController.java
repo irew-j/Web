@@ -61,6 +61,22 @@ public class ItineraryController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping("/{itineraryId}")
+    @Operation(summary = "일정 삭제")
+    public ResponseEntity<Void> deleteItinerary(Authentication authentication, @PathVariable Long itineraryId) {
+        String username = getUsername(authentication);
+        itineraryService.deleteItinerary(username, itineraryId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{itineraryId}")
+    @Operation(summary = "일정 이름 변경")
+    public ResponseEntity<ItineraryResponseDto> updateItinerary(Authentication authentication, @PathVariable Long itineraryId, @RequestBody ItineraryRequestDto requestDto) {
+        String username = getUsername(authentication);
+        ItineraryResponseDto responseDto = itineraryService.updateItinerary(username, itineraryId, requestDto);
+        return ResponseEntity.ok(responseDto);
+    }
+
     @PutMapping("/{itineraryId}/items/order")
     @Operation(summary = "일정 내 장소 순서 변경")
     public ResponseEntity<Void> updateItemOrder(Authentication authentication, @PathVariable Long itineraryId, @RequestBody ItineraryItemOrderRequestDto requestDto) {
