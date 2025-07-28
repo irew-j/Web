@@ -77,6 +77,20 @@ public class ItineraryService {
         itineraryItemRepository.delete(item);
     }
 
+    public void deleteItinerary(String username, Long itineraryId) {
+        Itinerary itinerary = itineraryRepository.findByIdAndMember_Username(itineraryId, username)
+                .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
+        itineraryRepository.delete(itinerary);
+    }
+
+    public ItineraryResponseDto updateItinerary(String username, Long itineraryId, ItineraryRequestDto requestDto) {
+        Itinerary itinerary = itineraryRepository.findByIdAndMember_Username(itineraryId, username)
+                .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
+        itinerary.setName(requestDto.getName());
+        Itinerary savedItinerary = itineraryRepository.save(itinerary);
+        return new ItineraryResponseDto(savedItinerary);
+    }
+
     public void updateItemOrder(String username, Long itineraryId, ItineraryItemOrderRequestDto requestDto) {
         Itinerary itinerary = itineraryRepository.findByIdAndMember_Username(itineraryId, username)
                 .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
