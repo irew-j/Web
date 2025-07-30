@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import kr.ac.hs.RandomTrip.trip.domain.Destination;
 import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequest;
 import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
 import kr.ac.hs.RandomTrip.trip.service.TripService;
@@ -81,4 +82,15 @@ public class TripController {
             @RequestParam double destLng) {
         return directionService.getDirections(originLat, originLng, destLat, destLng);
     }
+
+    @GetMapping("/destination/search")
+    @Operation(summary = "장소 이름으로 Destination 검색", description = "장소 이름을 검색하여 Destination의 ID, 이름, 주소를 반환합니다. 검색 결과가 없으면 404 Not Found를 반환합니다.")
+    public ResponseEntity<Destination> searchDestinationByName(
+            @Parameter(description = "검색할 장소 이름", example = "인천대공원")
+            @RequestParam String title) {
+        return tripService.searchDestinationByTitle(title)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
 }

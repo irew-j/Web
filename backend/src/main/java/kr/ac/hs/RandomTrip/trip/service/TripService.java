@@ -27,12 +27,21 @@ public class TripService {
 
     public TripService(TourApiClient tourApiClient, KakaoApiClient kakaoApiClient,
                        LlmTravelCourseExtractor llmTravelCourseExtractor, DestinationMapper destinationMapper,
-                       DestinationRepository destinationRepository) { // 주입
+                       DestinationRepository destinationRepository) {
         this.tourApiClient = tourApiClient;
         this.kakaoApiClient = kakaoApiClient;
         this.llmTravelCourseExtractor = llmTravelCourseExtractor;
         this.destinationMapper = destinationMapper;
-        this.destinationRepository = destinationRepository; // 주입
+        this.destinationRepository = destinationRepository;
+    }
+
+    // 장소 이름으로 Destination 검색
+    public Optional<Destination> searchDestinationByTitle(String title) {
+        List<Destination> destinations = destinationRepository.findByTitle(title);
+        if (!destinations.isEmpty()) {
+            return Optional.of(destinations.get(0)); // 첫 번째 결과 반환
+        }
+        return Optional.empty();
     }
 
     @Transactional
