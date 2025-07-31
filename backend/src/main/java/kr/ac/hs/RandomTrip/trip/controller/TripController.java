@@ -84,13 +84,13 @@ public class TripController {
     }
 
     @GetMapping("/destination/search")
-    @Operation(summary = "장소 이름으로 Destination 검색", description = "장소 이름을 검색하여 Destination의 ID, 이름, 주소를 반환합니다. 검색 결과가 없으면 404 Not Found를 반환합니다.")
-    public ResponseEntity<Destination> searchDestinationByName(
-            @Parameter(description = "검색할 장소 이름", example = "인천대공원")
+    @Operation(summary = "장소 이름으로 장소 정보 검색", description = "장소 이름을 검색하여 장소 정보를 반환합니다. DB에 없으면 외부 API를 통해 검색 및 저장 후 반환합니다.")
+    public ResponseEntity<TripResponse> searchDestinationByName(
+            @Parameter(description = "검색할 장소 이름", example = "경복궁")
             @RequestParam String title) {
-        return tripService.searchDestinationByTitle(title)
+        return tripService.searchPlaceByTitle(title)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElse(ResponseEntity.notFound().build());
     }
 
 }

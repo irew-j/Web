@@ -36,12 +36,18 @@ public class TripService {
     }
 
     // 장소 이름으로 Destination 검색
-    public Optional<Destination> searchDestinationByTitle(String title) {
-        List<Destination> destinations = destinationRepository.findByTitle(title);
+    @Transactional
+    public Optional<TripResponse> searchPlaceByTitle(String title) {
+        // 1. DB에서 title로 유사 검색
+        List<Destination> destinations = destinationRepository.findByTitleContaining(title);
         if (!destinations.isEmpty()) {
-            return Optional.of(destinations.get(0)); // 첫 번째 결과 반환
+            // 찾았으면 TripResponse로 변환하여 반환
+            return Optional.of(destinationMapper.toTripResponse(destinations.get(0)));
         }
-        return Optional.empty();
+
+        // 2. DB에 없으면 TourAPI -> KakaoAPI 순으로 검색 및 저장 (기존 로직 재사용)
+        TripResponse response = searchAndSavePlace(title, "", getRegionNameFromQuery(title), "");
+        return Optional.ofNullable(response);
     }
 
     @Transactional
