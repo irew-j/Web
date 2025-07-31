@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface DestinationRepository extends JpaRepository<Destination, Long> {
     Optional<Destination> findByContentId(String contentId);
     List<Destination> findByTitle(String title);
+    List<Destination> findByTitleContaining(String title);
 }
