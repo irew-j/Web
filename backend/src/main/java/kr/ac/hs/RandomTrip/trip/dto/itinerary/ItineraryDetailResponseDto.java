@@ -17,7 +17,7 @@ public class ItineraryDetailResponseDto {
     private final int itemCount;
     private final List<ItineraryItemResponseDto> items;
 
-    public ItineraryDetailResponseDto(Itinerary itinerary) {
+    private ItineraryDetailResponseDto(Itinerary itinerary) {
         this.id = itinerary.getId();
         this.name = itinerary.getName();
         this.createdAt = itinerary.getCreatedAt();
@@ -25,5 +25,9 @@ public class ItineraryDetailResponseDto {
         this.items = itinerary.getItems().stream()
                 .map(ItineraryItemResponseDto::new)
                 .collect(Collectors.toList());
+    }
+
+    public static ItineraryDetailResponseDto from(Itinerary itinerary) {
+        return new ItineraryDetailResponseDto(itinerary);
     }
 }
