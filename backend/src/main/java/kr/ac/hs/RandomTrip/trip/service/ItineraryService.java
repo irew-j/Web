@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -35,13 +37,13 @@ public class ItineraryService {
                 .member(member)
                 .build();
         Itinerary savedItinerary = itineraryRepository.save(itinerary);
-        return new ItineraryResponseDto(savedItinerary);
+        return ItineraryResponseDto.from(savedItinerary);
     }
 
     @Transactional(readOnly = true)
     public List<ItineraryResponseDto> getAllItineraries(String username) {
         return itineraryRepository.findByMember_Username(username).stream()
-                .map(ItineraryResponseDto::new)
+                .map(ItineraryResponseDto::from)
                 .collect(Collectors.toList());
     }
 
@@ -49,7 +51,7 @@ public class ItineraryService {
     public ItineraryDetailResponseDto getItineraryDetails(String username, Long itineraryId) {
         Itinerary itinerary = itineraryRepository.findByIdAndMember_Username(itineraryId, username)
                 .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
-        return new ItineraryDetailResponseDto(itinerary);
+        return ItineraryDetailResponseDto.from(itinerary);
     }
 
     public ItineraryItemResponseDto addItemToItinerary(String username, Long itineraryId, ItineraryItemRequestDto requestDto) {
@@ -58,7 +60,14 @@ public class ItineraryService {
         Destination destination = destinationRepository.findById(requestDto.getDestinationId())
                 .orElseThrow(() -> new IllegalArgumentException("해당 장소를 찾을 수 없습니다."));
 
-        int order = itinerary.getItems().size() + 1;
+        if (itineraryItemRepository.existsByItineraryAndDestination(itinerary, destination)) {
+            throw new IllegalArgumentException("이미 일정에 추가된 장소입니다.");
+        }
+
+        int order = itineraryItemRepository.findTopByItineraryIdOrderByItemOrderDesc(itineraryId)
+                .map(item -> item.getItemOrder() + 1)
+                .orElse(1);
+
         ItineraryItem newItem = ItineraryItem.builder()
                 .itinerary(itinerary)
                 .destination(destination)
@@ -88,7 +97,7 @@ public class ItineraryService {
                 .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
         itinerary.setName(requestDto.getName());
         Itinerary savedItinerary = itineraryRepository.save(itinerary);
-        return new ItineraryResponseDto(savedItinerary);
+        return ItineraryResponseDto.from(savedItinerary);
     }
 
     public void updateItemOrder(String username, Long itineraryId, ItineraryItemOrderRequestDto requestDto) {
@@ -96,16 +105,37 @@ public class ItineraryService {
                 .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
 
         List<Long> itemIds = requestDto.getItemIds();
-        for (int i = 0; i < itemIds.size(); i++) {
-            Long itemId = itemIds.get(i);
-            int newOrder = i + 1;
+        Map<Long, Integer> itemOrderMap = IntStream.range(0, itemIds.size())
+                .boxed()
+                .collect(Collectors.toMap(itemIds::get, i -> i + 1));
 
-            ItineraryItem item = itinerary.getItems().stream()
-                    .filter(it -> it.getId().equals(itemId))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("일정에서 해당 항목을 찾을 수 없습니다: " + itemId));
+        itinerary.getItems().forEach(item -> {
+            Integer newOrder = itemOrderMap.get(item.getId());
+            if (newOrder != null) {
+                item.setItemOrder(newOrder);
+            }
+        });
+    }
 
-            item.setItemOrder(newOrder);
-        }
+    public ItineraryResponseDto cloneItinerary(String username, Long itineraryId) {
+        Itinerary originalItinerary = itineraryRepository.findByIdAndMember_Username(itineraryId, username)
+                .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
+
+        Itinerary clonedItinerary = Itinerary.builder()
+                .name("복사본 - " + originalItinerary.getName())
+                .member(originalItinerary.getMember())
+                .build();
+
+        List<ItineraryItem> clonedItems = originalItinerary.getItems().stream()
+                .map(item -> ItineraryItem.builder()
+                        .itinerary(clonedItinerary)
+                        .destination(item.getDestination())
+                        .itemOrder(item.getItemOrder())
+                        .build())
+                .collect(Collectors.toList());
+
+        clonedItinerary.setItems(clonedItems);
+        Itinerary savedItinerary = itineraryRepository.save(clonedItinerary);
+        return ItineraryResponseDto.from(savedItinerary);
     }
 }

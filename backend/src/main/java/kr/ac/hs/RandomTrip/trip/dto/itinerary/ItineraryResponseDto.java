@@ -14,10 +14,14 @@ public class ItineraryResponseDto {
     private final LocalDateTime createdAt;
     private final int itemCount;
 
-    public ItineraryResponseDto(Itinerary itinerary) {
+    private ItineraryResponseDto(Itinerary itinerary) {
         this.id = itinerary.getId();
         this.name = itinerary.getName();
         this.createdAt = itinerary.getCreatedAt();
         this.itemCount = itinerary.getItems().size();
+    }
+
+    public static ItineraryResponseDto from(Itinerary itinerary) {
+        return new ItineraryResponseDto(itinerary);
     }
 }
