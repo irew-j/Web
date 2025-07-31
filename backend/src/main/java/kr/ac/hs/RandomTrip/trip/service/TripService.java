@@ -25,6 +25,9 @@ public class TripService {
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
+    // Levenshtein Distance 계산을 위한 StringUtils (Apache Commons Text)
+    private final org.apache.commons.text.similarity.LevenshteinDistance levenshteinDistance = new org.apache.commons.text.similarity.LevenshteinDistance();
+
     public TripService(TourApiClient tourApiClient, KakaoApiClient kakaoApiClient,
                        LlmTravelCourseExtractor llmTravelCourseExtractor, DestinationMapper destinationMapper,
                        DestinationRepository destinationRepository) {
@@ -37,17 +40,144 @@ public class TripService {
 
     // 장소 이름으로 Destination 검색
     @Transactional
-    public Optional<TripResponse> searchPlaceByTitle(String title) {
-        // 1. DB에서 title로 유사 검색
-        List<Destination> destinations = destinationRepository.findByTitleContaining(title);
-        if (!destinations.isEmpty()) {
-            // 찾았으면 TripResponse로 변환하여 반환
-            return Optional.of(destinationMapper.toTripResponse(destinations.get(0)));
+    public List<TripResponse> searchPlace(String keyword) {
+        List<Destination> combinedList = new ArrayList<>();
+        Set<String> processedTitles = new HashSet<>(); // 중복 체크를 위한 Set
+
+        // 1차 검색 (원본 검색어 사용)
+        performSearch(keyword, combinedList, processedTitles);
+
+        // 2차 검색 (1차 검색 결과가 없을 경우, 정제된 검색어 사용)
+        if (combinedList.isEmpty()) {
+            String cleanedKeyword = cleanSearchQuery(keyword);
+            if (!cleanedKeyword.isEmpty() && !cleanedKeyword.equals(keyword)) { // 정제된 키워드가 원본과 다르고 비어있지 않을 때만 재시도
+                performSearch(cleanedKeyword, combinedList, processedTitles);
+            }
         }
 
-        // 2. DB에 없으면 TourAPI -> KakaoAPI 순으로 검색 및 저장 (기존 로직 재사용)
-        TripResponse response = searchAndSavePlace(title, "", getRegionNameFromQuery(title), "");
-        return Optional.ofNullable(response);
+        // 3. 최종 결과 정렬 (원본 검색어와의 유사도 기준)
+        // TourAPI 결과가 먼저 오도록 하고, 그 다음 KakaoAPI 결과를 정렬
+        combinedList.sort((d1, d2) -> {
+            boolean d1FromTour = d1.getContentId() != null && !d1.getContentId().isEmpty();
+            boolean d2FromTour = d2.getContentId() != null && !d2.getContentId().isEmpty();
+
+            if (d1FromTour && !d2FromTour) return -1; // d1이 TourAPI, d2가 KakaoAPI -> d1 우선
+            if (!d1FromTour && d2FromTour) return 1;  // d2가 TourAPI, d1이 KakaoAPI -> d2 우선
+
+            // 둘 다 TourAPI 또는 둘 다 KakaoAPI인 경우, 원본 검색어와의 Levenshtein 유사도로 정렬
+            int dist1 = levenshteinDistance.apply(keyword, d1.getTitle());
+            int dist2 = levenshteinDistance.apply(keyword, d2.getTitle());
+            return Integer.compare(dist1, dist2); // 거리가 짧을수록(유사할수록) 우선
+        });
+
+        // 4. 상위 5개 선택 및 TripResponse로 변환
+        return combinedList.stream()
+                .limit(5)
+                .map(destinationMapper::toTripResponse)
+                .collect(Collectors.toList());
+    }
+
+    private void performSearch(String query, List<Destination> combinedList, Set<String> processedTitles) {
+        CompletableFuture<JsonNode> tourFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return tourApiClient.searchByKeyword(query, "", 1, new String[]{"12", "14", "25", "28"});
+            } catch (Exception e) {
+                System.err.println("TourAPI 검색 실패: " + e.getMessage());
+                return null;
+            }
+        }, executorService);
+
+        CompletableFuture<JsonNode> kakaoFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return kakaoApiClient.searchPlaces(query, "");
+            } catch (Exception e) {
+                System.err.println("KakaoAPI 검색 실패: " + e.getMessage());
+                return null;
+            }
+        }, executorService);
+
+        CompletableFuture.allOf(tourFuture, kakaoFuture).join();
+
+        try {
+            // TourAPI 결과 처리
+            JsonNode tourResults = tourFuture.get();
+            if (tourResults != null && tourResults.isArray()) {
+                for (JsonNode item : tourResults) {
+                    String title = item.path("title").asText();
+                    if (processedTitles.add(title)) { // 중복이 아니면 추가
+                        Destination dest = findOrCreateDestinationFromTour(item);
+                        if (dest != null) {
+                            combinedList.add(dest);
+                        }
+                    }
+                }
+            }
+
+            // KakaoAPI 결과 처리 (TourAPI 결과와 중복되지 않는 것만 추가)
+            JsonNode kakaoResults = kakaoFuture.get();
+            if (kakaoResults != null && kakaoResults.isArray()) {
+                for (JsonNode item : kakaoResults) {
+                    String title = item.path("place_name").asText();
+                    if (processedTitles.add(title)) { // 중복이 아니면 추가
+                        Destination dest = findOrCreateDestinationFromKakao(item);
+                        if (dest != null) {
+                            combinedList.add(dest);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("API 결과 처리 중 오류 발생: " + e.getMessage());
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    @Transactional
+    public Destination findOrCreateDestinationFromTour(JsonNode tourNode) {
+        String contentId = tourNode.path("contentid").asText();
+        return destinationRepository.findByContentId(contentId)
+                .orElseGet(() -> {
+                    try {
+                        JsonNode detailItem = tourApiClient.fetchTourDetail(contentId, tourNode.path("contenttypeid").asText());
+                        String description = "";
+                        if (detailItem.isArray() && detailItem.size() > 0) {
+                            description = detailItem.get(0).path("overview").asText("").replaceAll("<[^>]*>", "");
+                        }
+                        String imageUrl = tourNode.path("firstimage").asText("");
+                        if (imageUrl.isEmpty()) imageUrl = tourNode.path("firstimage2").asText("");
+
+                        Destination newDest = destinationMapper.toDestination(tourNode, description, imageUrl);
+                        return destinationRepository.save(newDest);
+                    } catch (Exception e) {
+                        System.err.println("TourAPI 상세정보 조회 또는 저장 실패: " + e.getMessage());
+                        return null;
+                    }
+                });
+    }
+
+    @Transactional
+    public Destination findOrCreateDestinationFromKakao(JsonNode kakaoNode) {
+        String title = kakaoNode.path("place_name").asText();
+        // Kakao는 contentId가 없으므로 title로만 조회. 동명이소 문제를 감수.
+        return destinationRepository.findByTitle(title).stream().findFirst()
+                .orElseGet(() -> {
+                    Destination newDest = destinationMapper.toDestination(kakaoNode);
+                    return destinationRepository.save(newDest);
+                });
+    }
+
+    // 검색어 정제 헬퍼 메소드
+    private String cleanSearchQuery(String query) {
+        // 괄호 안의 내용 제거 (예: "모모스커피 본점 - MOMOS COFFEE Flagship Store" -> "모모스커피 본점")
+        String cleaned = query.replaceAll("\\s*\\([^)]*\\)|\\s*-\\s*.*", "").trim();
+
+        // 특수문자 제거 (한글, 영어, 숫자만 남김)
+        cleaned = cleaned.replaceAll("[^가-힣a-zA-Z0-9\s]", "");
+
+        // 여러 공백을 하나의 공백으로
+        cleaned = cleaned.replaceAll("\s+", " ").trim();
+
+        return cleaned;
     }
 
     @Transactional

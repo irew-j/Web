@@ -84,13 +84,15 @@ public class TripController {
     }
 
     @GetMapping("/destination/search")
-    @Operation(summary = "장소 이름으로 장소 정보 검색", description = "장소 이름을 검색하여 장소 정보를 반환합니다. DB에 없으면 외부 API를 통해 검색 및 저장 후 반환합니다.")
-    public ResponseEntity<TripResponse> searchDestinationByName(
+    @Operation(summary = "장소 이름으로 장소 정보 검색", description = "장소 이름을 검색하여 장소 정보를 반환합니다. 정확한 결과가 없으면 유사한 장소 목록을 반환합니다.")
+    public ResponseEntity<List<TripResponse>> searchDestinationByName(
             @Parameter(description = "검색할 장소 이름", example = "경복궁")
             @RequestParam String title) {
-        return tripService.searchPlaceByTitle(title)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        List<TripResponse> results = tripService.searchPlace(title);
+        if (results.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(results);
     }
 
 }
