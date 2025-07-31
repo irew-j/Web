@@ -64,10 +64,12 @@ public class TripService {
             if (d1FromTour && !d2FromTour) return -1; // d1이 TourAPI, d2가 KakaoAPI -> d1 우선
             if (!d1FromTour && d2FromTour) return 1;  // d2가 TourAPI, d1이 KakaoAPI -> d2 우선
 
-            // 둘 다 TourAPI 또는 둘 다 KakaoAPI인 경우, 원본 검색어와의 Levenshtein 유사도로 정렬
+            // 둘 다 TourAPI 또는 둘 다 KakaoAPI인 경우, 정규화된 Levenshtein 유사도로 정렬
             int dist1 = levenshteinDistance.apply(keyword, d1.getTitle());
             int dist2 = levenshteinDistance.apply(keyword, d2.getTitle());
-            return Integer.compare(dist1, dist2); // 거리가 짧을수록(유사할수록) 우선
+            double normalized1 = (double) dist1 / Math.max(keyword.length(), d1.getTitle().length());
+            double normalized2 = (double) dist2 / Math.max(keyword.length(), d2.getTitle().length());
+            return Double.compare(normalized1, normalized2); // 정규화된 거리가 짧을수록(유사할수록) 우선
         });
 
         // 4. 상위 5개 선택 및 TripResponse로 변환
