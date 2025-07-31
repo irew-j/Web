@@ -116,4 +116,26 @@ public class ItineraryService {
             }
         });
     }
+
+    public ItineraryResponseDto cloneItinerary(String username, Long itineraryId) {
+        Itinerary originalItinerary = itineraryRepository.findByIdAndMember_Username(itineraryId, username)
+                .orElseThrow(() -> new IllegalArgumentException("해당 일정을 찾을 수 없습니다."));
+
+        Itinerary clonedItinerary = Itinerary.builder()
+                .name("복사본 - " + originalItinerary.getName())
+                .member(originalItinerary.getMember())
+                .build();
+
+        List<ItineraryItem> clonedItems = originalItinerary.getItems().stream()
+                .map(item -> ItineraryItem.builder()
+                        .itinerary(clonedItinerary)
+                        .destination(item.getDestination())
+                        .itemOrder(item.getItemOrder())
+                        .build())
+                .collect(Collectors.toList());
+
+        clonedItinerary.setItems(clonedItems);
+        Itinerary savedItinerary = itineraryRepository.save(clonedItinerary);
+        return ItineraryResponseDto.from(savedItinerary);
+    }
 }

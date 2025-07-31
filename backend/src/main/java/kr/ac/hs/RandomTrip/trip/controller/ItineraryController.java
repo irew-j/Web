@@ -85,6 +85,14 @@ public class ItineraryController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/{itineraryId}/clone")
+    @Operation(summary = "일정 복제")
+    public ResponseEntity<ItineraryResponseDto> cloneItinerary(Authentication authentication, @PathVariable Long itineraryId) {
+        String username = getUsername(authentication);
+        ItineraryResponseDto responseDto = itineraryService.cloneItinerary(username, itineraryId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(responseDto);
+    }
+
     private String getUsername(Authentication authentication) {
         CustomUser user = (CustomUser) authentication.getPrincipal();
         return user.getUsername();
