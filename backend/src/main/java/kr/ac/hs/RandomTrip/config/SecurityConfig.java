@@ -48,16 +48,14 @@ public class SecurityConfig {
                 .anyRequest().permitAll() // 나머지 요청은 일단 허용
         );
 
-        //        http.logout(logout -> logout.logoutUrl("/logout").logoutSuccessUrl("/"));
-
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "https://jolly-pebble-0b2668310.6.azurestaticapps.net", "https://randomtripapp-byd3gsg8bhh2f6cx.koreacentral-01.azurewebsites.net"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedOriginPatterns(List.of("http://localhost:5173", "https://jolly-pebble-0b2668310.6.azurestaticapps.net", "https://randomtripapp-byd3gsg8bhh2f6cx.koreacentral-01.azurewebsites.net"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
 
