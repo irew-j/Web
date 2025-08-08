@@ -60,6 +60,38 @@ public class KakaoApiClient {
         return response.path("documents");
     }
 
+    public JsonNode searchByCategory(String categoryCode, String longitude, String latitude, int radius) throws Exception {
+        StringBuilder urlBuilder = new StringBuilder("https://dapi.kakao.com/v2/local/search/category.json");
+        urlBuilder.append("?category_group_code=").append(URLEncoder.encode(categoryCode, StandardCharsets.UTF_8.toString()));
+        urlBuilder.append("&x=").append(longitude);
+        urlBuilder.append("&y=").append(latitude);
+        urlBuilder.append("&radius=").append(radius); // 반경 (미터 단위)
+        urlBuilder.append("&size=15");
+
+        URL url = new URL(urlBuilder.toString());
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Authorization", "KakaoAK " + kakaoApiKey);
+        conn.setRequestProperty("Content-type", "application/json");
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+
+        BufferedReader rd = new BufferedReader(new InputStreamReader(
+                conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300 ?
+                        conn.getInputStream() : conn.getErrorStream(), "UTF-8"));
+
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = rd.readLine()) != null) {
+            sb.append(line);
+        }
+        rd.close();
+        conn.disconnect();
+
+        JsonNode response = objectMapper.readTree(sb.toString());
+        return response.path("documents");
+    }
+
     public TripResponse toTripResponse(JsonNode kakaoPlace, String reason) {
         String title = kakaoPlace.path("place_name").asText("장소명 없음");
         String address = kakaoPlace.path("road_address_name").asText("");

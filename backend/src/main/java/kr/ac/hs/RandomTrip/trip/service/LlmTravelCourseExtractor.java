@@ -230,6 +230,89 @@ public class LlmTravelCourseExtractor {
         return allCourses;
     }
 
+    // 도보 여행 시작점 추천받는 메서드
+    public List<String> extractWalkStartPoints(String query) throws Exception {
+        if (query == null || query.trim().isEmpty()) {
+            throw new IllegalArgumentException("쿼리가 비어 있습니다");
+        }
+
+        String apiUrl = String.format("%s/openai/deployments/%s/chat/completions?api-version=%s",
+                openaiEndpoint.endsWith("/") ? openaiEndpoint.substring(0, openaiEndpoint.length() - 1) : openaiEndpoint,
+                openaiDeployment, URLEncoder.encode(openaiApiVersion, StandardCharsets.UTF_8.toString()));
+
+        URL url = new URL(apiUrl);
+        HttpURLConnection con = (HttpURLConnection) url.openConnection();
+        con.setRequestMethod("POST");
+        con.setRequestProperty("Content-Type", "application/json");
+        con.setRequestProperty("api-key", openaiApiKey);
+        con.setDoOutput(true);
+        con.setConnectTimeout(10000);
+        con.setReadTimeout(10000);
+
+        String systemPrompt = """
+        당신은 한국 지리 전문가입니다. 사용자의 요청에 따라 도보 여행을 시작하기 좋은, 서로 다른 핵심 장소 **두 곳**을 추천해주세요.
+
+        **🎯 핵심 미션: 가장 상징적이고 접근성 좋은 시작점 2곳 추천**
+
+        **규칙:**
+        1.  **두 개의 장소**: 반드시 서로 다른 장소 두 곳의 이름을 JSON 형식으로 응답해야 합니다.
+        2.  **공식 명칭**: 지도 앱(카카오맵, 네이버지도)에서 검색 가능한 공식 명칭을 사용해야 합니다.
+        3.  **음식점/카페 제외**: 관광 명소, 공원, 유명 거리, 지하철역 등 공공장소 위주로 추천해주세요.
+        4.  **순수 JSON 출력**: 어떤 설명이나 부연 없이 순수한 JSON 객체만 출력해야 합니다.
+
+        **응답 형식 (순수 JSON만):**
+        {"start_points": ["장소명1", "장소명2"]}
+
+        **올바른 예시:**
+        - 사용자: "서울 시청 근처에서 역사 테마로 걷기 좋은 곳 추천해줘"
+        - 당신: {"start_points": ["덕수궁", "서울광장"]}
+        - 사용자: "부산 광안리에서 바다 보면서 산책 시작할 만한 곳"
+        - 당신: {"start_points": ["광안리해수욕장", "민락수변공원"]}
+        """;
+
+        ObjectNode requestBody = objectMapper.createObjectNode();
+        ObjectNode messageSystem = objectMapper.createObjectNode();
+        messageSystem.put("role", "system");
+        messageSystem.put("content", systemPrompt);
+
+        ObjectNode messageUser = objectMapper.createObjectNode();
+        messageUser.put("role", "user");
+        messageUser.put("content", "요청: '" + query + "' - 이 요청에 가장 적합한, 서로 다른 도보 여행 시작점 두 곳을 알려주세요.");
+
+        requestBody.putArray("messages").add(messageSystem).add(messageUser);
+        requestBody.put("max_tokens", 100);
+        requestBody.put("temperature", 0.5);
+        requestBody.put("response_format", objectMapper.createObjectNode().put("type", "json_object")); // JSON 출력 모드 활성화
+
+        try (OutputStream os = con.getOutputStream()) {
+            byte[] input = objectMapper.writeValueAsBytes(requestBody);
+            os.write(input, 0, input.length);
+        }
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(
+                con.getResponseCode() >= 200 && con.getResponseCode() <= 300 ? con.getInputStream() : con.getErrorStream(), StandardCharsets.UTF_8));
+        StringBuilder response = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null) response.append(line);
+        in.close();
+
+        JsonNode root = objectMapper.readTree(response.toString());
+        JsonNode choices = root.path("choices");
+        if (!choices.isArray() || choices.size() == 0) {
+            throw new RuntimeException("Azure OpenAI 응답에 choices가 없습니다: " + response.toString());
+        }
+        String content = choices.get(0).path("message").path("content").asText("").trim();
+
+        JsonNode startPointsNode = objectMapper.readTree(content).path("start_points");
+        List<String> startPoints = new ArrayList<>();
+        if (startPointsNode.isArray()) {
+            for (JsonNode node : startPointsNode) {
+                startPoints.add(node.asText());
+            }
+        }
+        return startPoints;
+    }
+
     public static class TravelCourseItem {
         private int order;
         private String place;
