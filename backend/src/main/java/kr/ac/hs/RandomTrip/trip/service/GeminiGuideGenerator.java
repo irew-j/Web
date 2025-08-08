@@ -33,7 +33,7 @@ public class GeminiGuideGenerator {
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         String prompt = String.format(
-                "당신은 전문 여행 가이드입니다. 현재 '%s'에 대해 안내하고 있습니다. 사용자가 다음과 같이 질문했습니다: '%s'. 이 질문에 대해 친절하고 상세하게 답변해주세요. 이전 대화 내용을 참고하여 답변의 일관성을 유지해주세요. 답변은 한국어로 해주세요.",
+                "당신은 전문 여행 가이드입니다. 현재 '%s'에 대해 안내하고 있습니다. 사용자가 다음과 같이 질문했습니다: '%s'. 이 질문에 대해 3문장 이내로 간결하게 핵심만 답변해주세요. 답변은 한국어로 해주세요.",
                 destinationName, userMessage
         );
 
@@ -69,7 +69,7 @@ public class GeminiGuideGenerator {
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         String prompt = String.format(
-                "당신은 전문 여행 가이드입니다. '%s'에 대해 설명해주세요. 이 장소의 역사, 흥미로운 사실, 그리고 방문객을 위한 유용한 팁을 포함하여, 친절하고 매력적인 톤으로 설명해주세요. 답변은 한국어로 해주세요.",
+                "당신은 전문 여행 가이드입니다. '%s'에 대해 3문장 이내로 간결하게 핵심만 설명해주세요. 이 장소의 역사, 흥미로운 사실, 그리고 방문객을 위한 유용한 팁을 포함하여, 친절하고 매력적인 톤으로 설명해주세요. 답변은 한국어로 해주세요.",
                 destinationName
         );
 
