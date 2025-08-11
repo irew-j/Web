@@ -21,17 +21,17 @@ public class TourApiClient {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public JsonNode fetchAreaBasedList(int pageNo, int numOfRows) throws Exception {
-        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService1/areaBasedList1");
+        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService2/areaBasedList2");
         urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
         urlBuilder.append("&numOfRows=").append(numOfRows);
         urlBuilder.append("&pageNo=").append(pageNo);
-        urlBuilder.append("&MobileOS=ETC&MobileApp=RandomTrip&_type=json&listYN=Y&arrange=R");
+        urlBuilder.append("&MobileOS=ETC&MobileApp=RandomTrip&_type=json&arrange=R");
 
         return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
     }
 
     public JsonNode searchByKeyword(String keyword, String areaCode, int numOfRows, String[] contentTypeIds) throws Exception {
-        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService1/searchKeyword1");
+        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService2/searchKeyword2");
         urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
         urlBuilder.append("&numOfRows=").append(numOfRows);
         urlBuilder.append("&pageNo=1&MobileOS=ETC&MobileApp=RandomTrip&_type=json");
@@ -40,18 +40,16 @@ public class TourApiClient {
         if (contentTypeIds != null && contentTypeIds.length > 0) {
             urlBuilder.append("&contentTypeId=").append(contentTypeIds[0]);
         }
-        urlBuilder.append("&arrange=random");
+        urlBuilder.append("&arrange=R");
 
         return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
     }
 
     public JsonNode fetchTourDetail(String contentId, String contentTypeId) throws Exception {
-        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService1/detailCommon1");
+        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService2/detailCommon2");
         urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
         urlBuilder.append("&MobileOS=ETC&MobileApp=RandomTrip&_type=json");
         urlBuilder.append("&contentId=").append(contentId);
-        urlBuilder.append("&contentTypeId=").append(contentTypeId);
-        urlBuilder.append("&defaultYN=Y&firstImageYN=Y&addrinfoYN=Y&mapinfoYN=Y&overviewYN=Y");
 
         return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
     }
@@ -80,7 +78,7 @@ public class TourApiClient {
     }
 
     public JsonNode fetchLocationBasedList(double mapX, double mapY, int radius, int numOfRows, String contentTypeId) throws Exception {
-        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService1/locationBasedList1");
+        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService2/locationBasedList2");
         urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
         urlBuilder.append("&numOfRows=").append(numOfRows);
         urlBuilder.append("&pageNo=1");
@@ -91,18 +89,18 @@ public class TourApiClient {
         if (contentTypeId != null) {
             urlBuilder.append("&contentTypeId=").append(contentTypeId);
         }
-        urlBuilder.append("&listYN=Y&arrange=R");
+        urlBuilder.append("&arrange=R");
 
         return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
     }
 
     // 축제, 행사 정보를 검색하는 메서드 (contentTypeId: 15)
     public JsonNode searchFestivals(String areaCode, int numOfRows) throws Exception {
-        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService1/searchFestival1");
+        StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService2/searchFestival2");
         urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
         urlBuilder.append("&numOfRows=").append(numOfRows);
         urlBuilder.append("&pageNo=1&MobileOS=ETC&MobileApp=RandomTrip&_type=json");
-        urlBuilder.append("&listYN=Y&arrange=R");
+        urlBuilder.append("&arrange=R");
 
         if (areaCode != null && !areaCode.isEmpty()) {
             urlBuilder.append("&areaCode=").append(areaCode);
