@@ -42,10 +42,24 @@ public class SecurityConfig {
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         http.authorizeHttpRequests((authorize) -> authorize
-                .requestMatchers("/", "/login", "/members", "/swagger-ui/**", "/v3/api-docs/**", "/api/hello", "/ws-guide/**").permitAll()
+                .requestMatchers("/",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**",
+                        "/api/hello",
+                        "/api/trip/**",
+                        "/ws-guide/**",
+                        "/api/auth/login",
+                        "/api/auth/members").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/tour/**", "/my-page", "/api/auth/logout").hasRole("USER")
-                .anyRequest().permitAll() // 나머지 요청은 일단 허용
+                .requestMatchers(
+                        "/api/tour/**",
+                        "/api/itineraries/**",
+                        "/api/auth/my-page",
+                        "/api/auth/logout",
+                        "/api/footprints/**",
+                        "/api/storage/**").hasRole("USER")
+                .anyRequest().authenticated() // 나머지 요청은 인증된 사용자만 허용
+//                .anyRequest().permitAll() // 나머지 요청은 일단 허용
         );
 
         return http.build();
