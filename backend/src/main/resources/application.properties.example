@@ -46,6 +46,8 @@ azure.openai.api-key=your-azure-openai-api-key
 azure.openai.deployment=gpt-4o-mini
 # Azure OpenAI API 버전
 azure.openai.api-version=2025-01-01-preview
+# Azure Storage 연결 문자열 (Azure Portal에서 확인 가능)
+azure.storage.connection-string=your-azure-storage-connection-string
 
 # Kakao Developers에서 발급받은 REST API 키
 kakao.api-key=your-kakao-rest-api-key
