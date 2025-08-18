@@ -51,10 +51,11 @@ public class GeminiGuideGenerator {
                     GeminiResponse.class
             );
 
-            return Optional.ofNullable(response.getBody())
+            String rawText = Optional.ofNullable(response.getBody())
                     .flatMap(body -> body.getCandidates().stream().findFirst())
                     .map(candidate -> candidate.getContent().getParts().get(0).getText())
                     .orElse("죄송합니다, 답변을 생성할 수 없습니다.");
+            return formatGuideText(rawText);
 
         } catch (RestClientException e) {
             logger.error("Gemini API 호출 중 오류 발생: " + e.getMessage(), e);
@@ -87,16 +88,28 @@ public class GeminiGuideGenerator {
                     GeminiResponse.class
             );
 
-            return Optional.ofNullable(response.getBody())
+            String rawText = Optional.ofNullable(response.getBody())
                     .flatMap(body -> body.getCandidates().stream().findFirst())
                     .map(candidate -> candidate.getContent().getParts().get(0).getText())
                     .orElse("죄송합니다, 가이드 정보를 생성할 수 없습니다.");
+            return formatGuideText(rawText);
 
         } catch (RestClientException e) {
             logger.error("Gemini API 호출 중 오류 발생: " + e.getMessage(), e);
             return String.format("[임시 가이드] %s에 오신 것을 환영합니다! (API 호출 실패)", destinationName);
         }
     }
+    
+    // 문장마다 들여쓰기 추가하는 메서드
+    private String formatGuideText(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return "";
+        }
+        // 문장 끝에 오는 점과 공백을 찾아 줄바꿈과 들여쓰기를 추가합니다.
+        return text.replace(". ", ".\n").trim();
+    }
+
+
 
     // --- DTO Classes for Gemini API ---
 
