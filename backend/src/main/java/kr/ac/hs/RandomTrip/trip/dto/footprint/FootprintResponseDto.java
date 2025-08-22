@@ -27,4 +27,15 @@ public class FootprintResponseDto {
         this.latitude = footprint.getDestination().getMapy();
         this.longitude = footprint.getDestination().getMapx();
     }
+
+    public FootprintResponseDto(Footprint footprint, String fullPhotoUrl) {
+        this.id = footprint.getId();
+        this.memo = footprint.getMemo();
+        this.photoUrl = fullPhotoUrl;
+        this.createdAt = footprint.getCreatedAt();
+        this.destinationId = footprint.getDestination().getId();
+        this.destinationTitle = footprint.getDestination().getTitle();
+        this.latitude = footprint.getDestination().getMapy();
+        this.longitude = footprint.getDestination().getMapx();
+    }
 }
