@@ -12,6 +12,7 @@ import kr.ac.hs.RandomTrip.trip.repository.FootprintRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -24,6 +25,7 @@ public class FootprintService {
     private final FootprintRepository footprintRepository;
     private final MemberRepository memberRepository;
     private final DestinationRepository destinationRepository;
+    private final StorageService storageService; // StorageService 주입
 
     // 내 모든 발자국 조회
     public List<FootprintResponseDto> getMyFootprints(String username) {
@@ -31,7 +33,16 @@ public class FootprintService {
                 .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다. ID: " + username));
 
         return footprintRepository.findAllByMemberOrderByCreatedAtDesc(member).stream()
-                .map(FootprintResponseDto::new)
+                .map(footprint -> {
+                    String sasUrl = null;
+                    String storedPath = footprint.getPhotoUrl();
+
+                    // photoUrl에 값이 있을 경우에만 SAS URL 생성
+                    if (StringUtils.hasText(storedPath)) {
+                        sasUrl = storageService.generateSasReadUrl("footprint-images", storedPath);
+                    }
+                    return new FootprintResponseDto(footprint, sasUrl);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -76,11 +87,15 @@ public class FootprintService {
         Footprint footprint = footprintRepository.findById(footprintId)
                 .orElseThrow(() -> new EntityNotFoundException("발자국을 찾을 수 없습니다. ID: " + footprintId));
 
-        // 권한 확인
         if (!footprint.getMember().getUsername().equals(username)) {
             throw new IllegalStateException("이 발자국을 삭제할 권한이 없습니다.");
         }
 
+        // 1. Azure Storage에서 파일 삭제
+        String blobName = footprint.getPhotoUrl();
+        storageService.deleteBlob("footprint-images", blobName);
+
+        // 2. DB에서 레코드 삭제
         footprintRepository.delete(footprint);
     }
 }
