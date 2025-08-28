@@ -313,6 +313,86 @@ public class LlmTravelCourseExtractor {
         return startPoints;
     }
 
+    // 지역 추천 메서드 추가
+    public String extractRegionFromQuery(String query) throws Exception {
+        String apiUrl = String.format("%s/openai/deployments/%s/chat/completions?api-version=%s",
+                openaiEndpoint.endsWith("/") ? openaiEndpoint.substring(0, openaiEndpoint.length() - 1) : openaiEndpoint,
+                openaiDeployment, URLEncoder.encode(openaiApiVersion, StandardCharsets.UTF_8.toString()));
+
+        URL url = new URL(apiUrl);
+        HttpURLConnection con = (HttpURLConnection) url.openConnection();
+        con.setRequestMethod("POST");
+        con.setRequestProperty("Content-Type", "application/json");
+        con.setRequestProperty("api-key", openaiApiKey);
+        con.setDoOutput(true);
+        con.setConnectTimeout(10000);
+        con.setReadTimeout(10000);
+
+        String systemPrompt = """
+        당신은 한국의 지역 추천 전문가입니다. 사용자의 여행 테마에 가장 어울리는 대한민국 **주요 지역(도, 광역시)** 이름을 딱 하나만 추천해주세요.
+
+        **🎯 핵심 미션: 테마에 맞는 지역 이름 하나만 정확히 반환**
+
+        **규칙:**
+        1.  **단 하나의 지역**: 반드시 하나의 지역 이름만 응답해야 합니다.
+        2.  **지정된 목록**: 다음 목록에 있는 이름 중 하나만 선택해야 합니다:
+            [서울, 부산, 대구, 인천, 광주, 대전, 울산, 세종, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주]
+        3.  **순수 JSON 출력**: 어떤 설명이나 부연 없이 순수한 JSON 객체만 출력해야 합니다.
+
+        **응답 형식 (순수 JSON만):**
+        {"region": "추천지역"}
+
+        **올바른 예시:**
+        - 사용자: "바다 보면서 힐링하고 싶어"
+        - 당신: {"region": "부산"}
+        - 사용자: "역사적인 곳을 탐방하고 싶어"
+        - 당신: {"region": "경주"}
+        - 사용자: "조용한 산속에서 휴식하고 싶어"
+        - 당신: {"region": "강원"}
+        """;
+
+        ObjectNode requestBody = objectMapper.createObjectNode();
+        ObjectNode messageSystem = objectMapper.createObjectNode();
+        messageSystem.put("role", "system");
+        messageSystem.put("content", systemPrompt);
+
+        ObjectNode messageUser = objectMapper.createObjectNode();
+        messageUser.put("role", "user");
+        messageUser.put("content", "요청: '" + query + "' - 이 여행 테마에 가장 적합한 지역 이름 하나를 추천해주세요.");
+
+        requestBody.putArray("messages").add(messageSystem).add(messageUser);
+        requestBody.put("max_tokens", 50);
+        requestBody.put("temperature", 0.3);
+        requestBody.put("response_format", objectMapper.createObjectNode().put("type", "json_object"));
+
+        try (OutputStream os = con.getOutputStream()) {
+            byte[] input = objectMapper.writeValueAsBytes(requestBody);
+            os.write(input, 0, input.length);
+        }
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(
+                con.getResponseCode() >= 200 && con.getResponseCode() <= 300 ? con.getInputStream() : con.getErrorStream(), StandardCharsets.UTF_8));
+        StringBuilder response = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null) response.append(line);
+        in.close();
+
+        JsonNode root = objectMapper.readTree(response.toString());
+        JsonNode choices = root.path("choices");
+        if (!choices.isArray() || choices.size() == 0) {
+            System.err.println("Azure OpenAI 응답에 choices가 없습니다: " + response.toString());
+            return null;
+        }
+        String content = choices.get(0).path("message").path("content").asText("").trim();
+        if (content.isEmpty()) {
+            System.err.println("Azure OpenAI 응답 content가 비어있습니다.");
+            return null;
+        }
+
+        JsonNode regionNode = objectMapper.readTree(content).path("region");
+        return regionNode.asText(null);
+    }
+
     public static class TravelCourseItem {
         private int order;
         private String place;

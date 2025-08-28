@@ -281,14 +281,35 @@ public class TripService {
     // 도보 여행 추천 메서드
     @Transactional
     private List<List<TripResponse>> recommendWalkCourse(TripRecommendRequest request) throws Exception {
-        String regionName = getRegionNameFromQuery(request.getQuery());
-        if (regionName == null || regionName.isBlank()) {
-            throw new IllegalArgumentException("요청에서 지역명을 찾을 수 없습니다: " + request.getQuery());
-        }
-        String regionKeyword = regionName.replace("경기도 ", "").replace("특별시", "").replace("광역시", "").replace("시", "");
+        final String originalQuery = request.getQuery();
+        String extractedRegion = getRegionNameFromQuery(originalQuery);
 
-        // 1. LLM으로 도보 여행 시작점 2개 추천받기
-        List<String> startPointNames = llmTravelCourseExtractor.extractWalkStartPoints(request.getQuery());
+        final String finalRegionName; // 람다 내에서 사용될 final 변수
+
+        if (extractedRegion != null && !extractedRegion.isBlank()) {
+            finalRegionName = extractedRegion; // 기존 쿼리에서 지역명 추출 성공
+        } else {
+            // 쿼리에 지역명이 없을 경우 AI에게 추천 요청
+            System.out.println("요청에서 지역명을 찾을 수 없어 AI에게 지역 추천을 요청합니다: " + originalQuery);
+            try {
+                String recommendedRegion = llmTravelCourseExtractor.extractRegionFromQuery(originalQuery);
+                if (recommendedRegion == null || recommendedRegion.isBlank()) {
+                    System.err.println("AI가 지역을 추천하지 못했습니다.");
+                    return Collections.emptyList();
+                }
+                finalRegionName = recommendedRegion; // AI가 추천한 지역명을 할당
+                System.out.println("AI가 추천한 지역: " + finalRegionName);
+            } catch (Exception e) {
+                System.err.println("AI 지역 추천 중 오류 발생: " + e.getMessage());
+                return Collections.emptyList();
+            }
+        }
+
+        final String regionKeyword = finalRegionName.replace("경기도 ", "").replace("특별시", "").replace("광역시", "").replace("시", "");
+
+        // 1. LLM으로 도보 여행 시작점 2개 추천받기 (AI가 추천한 지역명 포함)
+        String queryForStartPoints = originalQuery + " (" + finalRegionName + ")";
+        List<String> startPointNames = llmTravelCourseExtractor.extractWalkStartPoints(queryForStartPoints);
         if (startPointNames == null || startPointNames.isEmpty()) {
             System.err.println("LLM으로부터 도보 여행 시작점을 추천받지 못했습니다.");
             return Collections.emptyList();
@@ -298,8 +319,8 @@ public class TripService {
         List<CompletableFuture<List<TripResponse>>> courseFutures = startPointNames.stream()
             .map(startPointName -> CompletableFuture.supplyAsync(() -> {
                 try {
-                    // 시작점 검증 (결과 목록 전체를 확인)
-                    JsonNode placeResults = kakaoApiClient.searchPlaces(startPointName, regionName);
+                    // 시작점 검증 (finalRegionName 사용)
+                    JsonNode placeResults = kakaoApiClient.searchPlaces(startPointName, finalRegionName);
                     if (placeResults == null || !placeResults.isArray() || placeResults.size() == 0) {
                         System.err.println("경고: 추천된 시작점을 찾을 수 없음 - " + startPointName);
                         return null;
@@ -308,9 +329,9 @@ public class TripService {
                     JsonNode validStartPoint = null;
                     for (JsonNode place : placeResults) {
                         String address = place.path("address_name").asText();
-                        if (address.contains(regionKeyword)) {
+                        if (address.contains(regionKeyword)) { // final 변수인 regionKeyword 사용
                             validStartPoint = place;
-                            break; // 해당 지역의 첫 번째 장소를 유효한 시작점으로 확정
+                            break;
                         }
                     }
 
@@ -319,8 +340,8 @@ public class TripService {
                         return null;
                     }
 
-                    // 검증 통과, 코스 생성
-                    return createSingleWalkCourse(validStartPoint, regionName, regionKeyword);
+                    // 검증 통과, 코스 생성 (finalRegionName, regionKeyword 사용)
+                    return createSingleWalkCourse(validStartPoint, finalRegionName, regionKeyword);
                 } catch (Exception e) {
                     System.err.println("도보 코스 생성 중 오류 발생 (시작점: " + startPointName + "): " + e.getMessage());
                     return null;
