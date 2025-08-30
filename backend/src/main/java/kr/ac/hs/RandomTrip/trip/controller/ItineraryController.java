@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import kr.ac.hs.RandomTrip.auth.security.CustomUser;
 import kr.ac.hs.RandomTrip.trip.dto.itinerary.*;
 import kr.ac.hs.RandomTrip.trip.service.ItineraryService;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,10 +47,18 @@ public class ItineraryController {
     }
 
     @PostMapping("/{itineraryId}/items")
-    @Operation(summary = "일정에 장소 추가")
+    @Operation(summary = "일정에 장소 추가 (ID 사용)")
     public ResponseEntity<ItineraryItemResponseDto> addItemToItinerary(Authentication authentication, @PathVariable Long itineraryId, @RequestBody ItineraryItemRequestDto requestDto) {
         String username = getUsername(authentication);
         ItineraryItemResponseDto responseDto = itineraryService.addItemToItinerary(username, itineraryId, requestDto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(responseDto);
+    }
+
+    @PostMapping("/{itineraryId}/add-by-name")
+    @Operation(summary = "장소 이름으로 일정에 추가 (AI 가이드용)")
+    public ResponseEntity<ItineraryItemResponseDto> addItemByPlaceName(Authentication authentication, @PathVariable Long itineraryId, @RequestBody PlaceNameRequest request) {
+        String username = getUsername(authentication);
+        ItineraryItemResponseDto responseDto = itineraryService.addItemByPlaceName(username, itineraryId, request.getPlaceName());
         return ResponseEntity.status(HttpStatus.CREATED).body(responseDto);
     }
 
@@ -96,5 +105,10 @@ public class ItineraryController {
     private String getUsername(Authentication authentication) {
         CustomUser user = (CustomUser) authentication.getPrincipal();
         return user.getUsername();
+    }
+
+    @Data
+    static class PlaceNameRequest {
+        private String placeName;
     }
 }
