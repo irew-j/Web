@@ -803,4 +803,32 @@ public class TripService {
         }
     }
 
+    @Transactional
+    public Optional<Destination> findTopDestinationByHybridSearch(String placeName) {
+        // 1. TourAPI 우선 검색
+        try {
+            JsonNode tourItems = tourApiClient.searchByKeyword(placeName, "", 1, new String[]{"12", "14", "25", "28"});
+            if (tourItems != null && tourItems.size() > 0) {
+                // TourAPI 결과가 있으면 첫 번째 아이템으로 Destination을 찾거나 생성
+                return Optional.ofNullable(findOrCreateDestinationFromTour(tourItems.get(0)));
+            }
+        } catch (Exception e) {
+            System.err.println("TourAPI search failed during hybrid search: " + e.getMessage());
+            // 에러 발생 시 KakaoAPI로 폴백(fallback)
+        }
+
+        // 2. TourAPI에 결과가 없으면 KakaoAPI 검색
+        try {
+            JsonNode kakaoPlaces = kakaoApiClient.searchPlaces(placeName, "");
+            if (kakaoPlaces != null && kakaoPlaces.size() > 0) {
+                // KakaoAPI 결과가 있으면 첫 번째 아이템으로 Destination을 찾거나 생성
+                return Optional.ofNullable(findOrCreateDestinationFromKakao(kakaoPlaces.get(0)));
+            }
+        } catch (Exception e) {
+            System.err.println("KakaoAPI search failed during hybrid search: " + e.getMessage());
+        }
+
+        return Optional.empty();
+    }
+
 }

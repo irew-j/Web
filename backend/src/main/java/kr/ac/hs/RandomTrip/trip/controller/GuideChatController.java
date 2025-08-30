@@ -23,15 +23,22 @@ public class GuideChatController {
         String destinationName = chatMessage.getDestinationName();
         String userMessage = chatMessage.getMessage();
 
-        // Gemini API를 호출하여 가이드 응답 생성
-        String guideResponse = geminiGuideGenerator.generateGuide(destinationName, userMessage);
+        // Gemini API를 호출하여 구조화된 가이드 응답 생성
+        GeminiGuideGenerator.GuideResponse guideResponse = geminiGuideGenerator.generateGuide(destinationName, userMessage);
 
         ChatMessage responseMessage = new ChatMessage();
-        responseMessage.setType(ChatMessage.MessageType.TALK);
         responseMessage.setSender("Gemini Guide");
         responseMessage.setReceiver(chatMessage.getSender());
-        responseMessage.setMessage(guideResponse);
         responseMessage.setDestinationName(destinationName);
+        responseMessage.setMessage(guideResponse.getReply());
+
+        // 장소 추천이 있는지 확인
+        if (guideResponse.getPlaceName() != null && !guideResponse.getPlaceName().isBlank()) {
+            responseMessage.setType(ChatMessage.MessageType.RECOMMEND);
+            responseMessage.setPlaceName(guideResponse.getPlaceName());
+        } else {
+            responseMessage.setType(ChatMessage.MessageType.TALK);
+        }
 
         messagingTemplate.convertAndSend(String.format("/topic/public/%s", destinationName), responseMessage);
     }
@@ -46,13 +53,13 @@ public class GuideChatController {
         headerAccessor.getSessionAttributes().put("destinationName", destinationName);
 
         // 초기 가이드 메시지 생성
-        String initialGuide = geminiGuideGenerator.generateGuide(destinationName);
+        GeminiGuideGenerator.GuideResponse initialGuide = geminiGuideGenerator.generateGuide(destinationName);
 
         ChatMessage initialMessage = new ChatMessage();
         initialMessage.setType(ChatMessage.MessageType.ENTER);
         initialMessage.setSender("Gemini Guide");
         initialMessage.setReceiver(username);
-        initialMessage.setMessage(initialGuide);
+        initialMessage.setMessage(initialGuide.getReply()); // 응답 객체의 reply 필드 사용
         initialMessage.setDestinationName(destinationName);
 
         messagingTemplate.convertAndSend(String.format("/topic/public/%s", destinationName), initialMessage);
