@@ -39,8 +39,9 @@ public class TourService {
         }
 
         if (closestDestination.getGuide() == null || closestDestination.getGuide().isBlank()) {
-            String guide = guideGenerator.generateGuide(closestDestination.getTitle());
-            closestDestination.setGuide(guide);
+            GeminiGuideGenerator.GuideResponse guideResponse = guideGenerator.generateGuide(closestDestination.getTitle());
+            String guideText = guideResponse.getReply(); // 응답 객체에서 실제 텍스트를 추출
+            closestDestination.setGuide(guideText);
             destinationRepository.save(closestDestination);
         }
 
