@@ -1,4 +1,4 @@
-package kr.ac.hs.RandomTrip.trip.llm;
+package kr.ac.hs.RandomTrip.guidechat.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;

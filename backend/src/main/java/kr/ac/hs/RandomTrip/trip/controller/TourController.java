@@ -2,7 +2,7 @@ package kr.ac.hs.RandomTrip.trip.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import kr.ac.hs.RandomTrip.trip.dto.GuideResponse;
+import kr.ac.hs.RandomTrip.guidechat.dto.GuideResponse;
 import kr.ac.hs.RandomTrip.trip.dto.VerifyRequest;
 import kr.ac.hs.RandomTrip.trip.service.TourService;
 import org.springframework.http.ResponseEntity;

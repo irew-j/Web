@@ -1,6 +1,6 @@
 package kr.ac.hs.RandomTrip.trip.websocket;
 
-import kr.ac.hs.RandomTrip.trip.llm.GeminiGuideGenerator;
+import kr.ac.hs.RandomTrip.guidechat.llm.GeminiGuideGenerator;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

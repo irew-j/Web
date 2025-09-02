@@ -1,4 +1,4 @@
-package kr.ac.hs.RandomTrip.trip.dto;
+package kr.ac.hs.RandomTrip.guidechat.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;

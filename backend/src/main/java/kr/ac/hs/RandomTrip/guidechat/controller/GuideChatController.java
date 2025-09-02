@@ -1,7 +1,7 @@
-package kr.ac.hs.RandomTrip.trip.controller;
+package kr.ac.hs.RandomTrip.guidechat.controller;
 
-import kr.ac.hs.RandomTrip.trip.dto.ChatMessage;
-import kr.ac.hs.RandomTrip.trip.llm.GeminiGuideGenerator;
+import kr.ac.hs.RandomTrip.guidechat.dto.ChatMessage;
+import kr.ac.hs.RandomTrip.guidechat.llm.GeminiGuideGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
