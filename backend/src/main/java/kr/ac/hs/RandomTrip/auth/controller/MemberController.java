@@ -2,17 +2,12 @@ package kr.ac.hs.RandomTrip.auth.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletResponse;
 import kr.ac.hs.RandomTrip.auth.dto.LoginRequestDto;
 import kr.ac.hs.RandomTrip.auth.dto.MemberDto;
-import kr.ac.hs.RandomTrip.auth.repository.MemberRepository;
 import kr.ac.hs.RandomTrip.auth.security.CustomUser;
-import kr.ac.hs.RandomTrip.auth.security.JwtUtil;
 import kr.ac.hs.RandomTrip.auth.service.MemberService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,10 +24,8 @@ import java.util.stream.Collectors;
 @Tag(name = "Auth", description = "인증 및 회원 관련 API") // Tag 추가
 public class MemberController {
 
-    private final MemberRepository memberRepository;
+    // Controller는 Service 계층에만 의존하도록 변경
     private final MemberService memberService;
-    private final AuthenticationManagerBuilder authenticationManagerBuilder;
-    private final JwtUtil jwtUtil;
 
     @PostMapping("/members") // 경로 변경
     @Operation(summary = "회원가입", description = "새로운 회원을 등록합니다.")
@@ -44,16 +37,11 @@ public class MemberController {
 
     @PostMapping("/login")
     @Operation(summary = "로그인", description = "사용자 인증 후 JWT 토큰을 발급합니다.")
-    public Map<String, String> loginJWT(@RequestBody LoginRequestDto loginRequestDto,
-                           HttpServletResponse response
-    ) {
-        var authToken = new UsernamePasswordAuthenticationToken(
-                loginRequestDto.getUsername(), loginRequestDto.getPassword()
-        );
-        var auth = authenticationManagerBuilder.getObject().authenticate(authToken);
-        SecurityContextHolder.getContext().setAuthentication(auth);
+    public Map<String, String> loginJWT(@RequestBody LoginRequestDto loginRequestDto) {
+        // 비즈니스 로직(로그인)을 Service 계층에 위임
+        String jwt = memberService.login(loginRequestDto);
 
-        var jwt = jwtUtil.createToken(SecurityContextHolder.getContext().getAuthentication());
+        // 응답으로 보낼 토큰을 Map에 담아 반환
         Map<String, String> tokenMap = new HashMap<>();
         tokenMap.put("token", jwt);
 
