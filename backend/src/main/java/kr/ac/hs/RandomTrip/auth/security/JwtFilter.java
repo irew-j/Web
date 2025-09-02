@@ -61,9 +61,9 @@ public class JwtFilter extends OncePerRequestFilter {
         var customUser = new CustomUser(
                 claims.get("username", String.class),
                 "", // 비밀번호는 인증 후에는 필요 없음
-                authorities
+                authorities,
+                claims.get("displayName", String.class)
         );
-        customUser.displayName = claims.get("displayName", String.class);
 
         var authToken = new UsernamePasswordAuthenticationToken(
                 customUser, null, authorities

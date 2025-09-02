@@ -40,6 +40,6 @@ public class MemberResponseDto {
                 .collect(Collectors.toList());
 
         // 생성자를 사용하여 DTO 객체 생성 및 반환
-        return new MemberResponseDto(user.getUsername(), user.displayName, authorities);
+        return new MemberResponseDto(user.getUsername(), user.getDisplayName(), authorities);
     }
 }
