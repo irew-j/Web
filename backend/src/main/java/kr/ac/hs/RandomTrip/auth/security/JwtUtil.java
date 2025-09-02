@@ -35,7 +35,7 @@ public class JwtUtil {
 
         return Jwts.builder()
                 .claim("username", user.getUsername())
-                .claim("displayName", user.displayName)
+                .claim("displayName", user.getDisplayName())
                 .claim("authorities", authorities)
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60)) //유효기간 1시간
