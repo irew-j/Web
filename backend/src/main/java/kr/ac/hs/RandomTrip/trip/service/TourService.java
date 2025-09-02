@@ -2,12 +2,14 @@ package kr.ac.hs.RandomTrip.trip.service;
 
 import kr.ac.hs.RandomTrip.auth.domain.Member;
 import kr.ac.hs.RandomTrip.auth.repository.MemberRepository;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.LLMGuideResponseDto;
 import kr.ac.hs.RandomTrip.trip.domain.Destination;
 import kr.ac.hs.RandomTrip.trip.domain.Visit;
-import kr.ac.hs.RandomTrip.trip.dto.GuideResponse;
+import kr.ac.hs.RandomTrip.guidechat.dto.GuideResponseDto;
+import kr.ac.hs.RandomTrip.guidechat.llm.GeminiGuideGenerator;
 import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
-import kr.ac.hs.RandomTrip.trip.domain.ItineraryItem;
-import kr.ac.hs.RandomTrip.trip.repository.ItineraryItemRepository;
+import kr.ac.hs.RandomTrip.itinerary.domain.ItineraryItem;
+import kr.ac.hs.RandomTrip.itinerary.repository.ItineraryItemRepository;
 import kr.ac.hs.RandomTrip.trip.repository.VisitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -30,7 +32,7 @@ public class TourService {
     private static final double MAX_DISTANCE_METERS = 500.0; // 500미터
 
     @Transactional(readOnly = true)
-    public Optional<GuideResponse> getGuideForCurrentLocation(double lat, double lon) {
+    public Optional<GuideResponseDto> getGuideForCurrentLocation(double lat, double lon) {
         List<Destination> destinations = destinationRepository.findAll();
         Destination closestDestination = findClosestDestination(lat, lon, destinations);
 
@@ -39,13 +41,13 @@ public class TourService {
         }
 
         if (closestDestination.getGuide() == null || closestDestination.getGuide().isBlank()) {
-            GeminiGuideGenerator.GuideResponse guideResponse = guideGenerator.generateOneTimeGuide(closestDestination.getTitle());
+            LLMGuideResponseDto guideResponse = guideGenerator.generateOneTimeGuide(closestDestination.getTitle());
             String guideText = guideResponse.getReply(); // 응답 객체에서 실제 텍스트를 추출
             closestDestination.setGuide(guideText);
             destinationRepository.save(closestDestination);
         }
 
-        return Optional.of(new GuideResponse(closestDestination.getTitle(), closestDestination.getGuide()));
+        return Optional.of(new GuideResponseDto(closestDestination.getTitle(), closestDestination.getGuide()));
     }
 
     @Transactional

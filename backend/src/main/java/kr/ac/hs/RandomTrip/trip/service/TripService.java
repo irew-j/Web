@@ -1,9 +1,13 @@
 package kr.ac.hs.RandomTrip.trip.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import kr.ac.hs.RandomTrip.trip.client.KakaoApiClient;
+import kr.ac.hs.RandomTrip.trip.client.TourApiClient;
 import kr.ac.hs.RandomTrip.trip.domain.Destination;
-import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequest;
-import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
+import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequestDto;
+import kr.ac.hs.RandomTrip.trip.dto.TripResponseDto;
+import kr.ac.hs.RandomTrip.trip.llm.LlmTravelCourseExtractor;
+import kr.ac.hs.RandomTrip.trip.mapper.DestinationMapper;
 import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,7 +44,7 @@ public class TripService {
 
     // 장소 이름으로 Destination 검색
     @Transactional
-    public List<TripResponse> searchPlace(String keyword) {
+    public List<TripResponseDto> searchPlace(String keyword) {
         List<Destination> combinedList = new ArrayList<>();
         Set<String> processedTitles = new HashSet<>(); // 중복 체크를 위한 Set
 
@@ -183,7 +187,7 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse getRandomDestination() {
+    public TripResponseDto getRandomDestination() {
         try {
             String[] allowedContentTypes = {"12", "14", "25", "28"}; // 관광지, 문화시설, 여행코스, 레포츠
             int maxRetries = 10; // 최대 재시도 횟수
@@ -232,16 +236,16 @@ public class TripService {
                 }
             }
             System.err.println("랜덤 관광지 검색 실패: 조건에 맞는 관광지 정보를 찾을 수 없습니다.");
-            return new TripResponse(); // 실패 시 빈 TripResponse 반환
+            return new TripResponseDto(); // 실패 시 빈 TripResponse 반환
         } catch (Exception e) {
             System.err.println("getRandomDestination API 호출 오류: " + e.getMessage());
-            return new TripResponse(); // 오류 발생 시 빈 TripResponse 반환
+            return new TripResponseDto(); // 오류 발생 시 빈 TripResponse 반환
         }
     }
     
     // 여행 추천 메서드
     @Transactional
-    public List<List<TripResponse>> recommendTrip(TripRecommendRequest request, String transport) {
+    public List<List<TripResponseDto>> recommendTrip(TripRecommendRequestDto request, String transport) {
         try {
             // "도보"일 경우 새로운 로직 실행
             if ("도보".equals(transport)) {
@@ -259,7 +263,7 @@ public class TripService {
                 return Collections.emptyList();
             }
 
-            List<CompletableFuture<List<TripResponse>>> courseFutures = allCourseItems.stream()
+            List<CompletableFuture<List<TripResponseDto>>> courseFutures = allCourseItems.stream()
                     .map(courseItems -> processCourseConcurrently(courseItems, targetAreaCode, regionName))
                     .collect(Collectors.toList());
 
@@ -280,7 +284,7 @@ public class TripService {
     
     // 도보 여행 추천 메서드
     @Transactional
-    private List<List<TripResponse>> recommendWalkCourse(TripRecommendRequest request) throws Exception {
+    private List<List<TripResponseDto>> recommendWalkCourse(TripRecommendRequestDto request) throws Exception {
         final String originalQuery = request.getQuery();
         String extractedRegion = getRegionNameFromQuery(originalQuery);
 
@@ -316,7 +320,7 @@ public class TripService {
         }
 
         // 2. 추천받은 시작점들을 검증하고, 유효한 시작점만 병렬로 코스 생성
-        List<CompletableFuture<List<TripResponse>>> courseFutures = startPointNames.stream()
+        List<CompletableFuture<List<TripResponseDto>>> courseFutures = startPointNames.stream()
             .map(startPointName -> CompletableFuture.supplyAsync(() -> {
                 try {
                     // 시작점 검증 (finalRegionName 사용)
@@ -365,7 +369,7 @@ public class TripService {
         ).get();
     }
 
-    private List<TripResponse> createSingleWalkCourse(JsonNode startPlace, String regionName, String regionKeyword) throws Exception {
+    private List<TripResponseDto> createSingleWalkCourse(JsonNode startPlace, String regionName, String regionKeyword) throws Exception {
         String startPointName = startPlace.path("place_name").asText();
         String startX = startPlace.path("x").asText();
         String startY = startPlace.path("y").asText();
@@ -385,7 +389,7 @@ public class TripService {
 
         CompletableFuture.allOf(attractionsFuture, cultureFuture).join();
 
-        Map<String, TripResponse> nearbyPlaces = new LinkedHashMap<>();
+        Map<String, TripResponseDto> nearbyPlaces = new LinkedHashMap<>();
         Destination startDest = findOrCreateDestinationFromKakao(startPlace);
         if (startDest != null) {
             nearbyPlaces.put(startDest.getTitle(), destinationMapper.toTripResponse(startDest));
@@ -396,7 +400,7 @@ public class TripService {
         addPlacesToMap(nearbyPlaces, attractionsFuture.get(), mainKeyword, regionKeyword);
         addPlacesToMap(nearbyPlaces, cultureFuture.get(), mainKeyword, regionKeyword);
 
-        List<TripResponse> finalCourse = new ArrayList<>(nearbyPlaces.values());
+        List<TripResponseDto> finalCourse = new ArrayList<>(nearbyPlaces.values());
         if (finalCourse.size() > 1) {
             finalCourse = optimizeRoute(finalCourse);
         }
@@ -404,7 +408,7 @@ public class TripService {
         return finalCourse.stream().limit(4).collect(Collectors.toList());
     }
 
-    private void addPlacesToMap(Map<String, TripResponse> placeMap, JsonNode placesNode, String startPointKeyword, String regionKeyword) {
+    private void addPlacesToMap(Map<String, TripResponseDto> placeMap, JsonNode placesNode, String startPointKeyword, String regionKeyword) {
         if (placesNode != null && placesNode.isArray()) {
             for (JsonNode place : placesNode) {
                 String placeName = place.path("place_name").asText();
@@ -425,11 +429,11 @@ public class TripService {
         }
     }
 
-    private CompletableFuture<List<TripResponse>> processCourseConcurrently(
+    private CompletableFuture<List<TripResponseDto>> processCourseConcurrently(
             List<LlmTravelCourseExtractor.TravelCourseItem> courseItems,
             String targetAreaCode, String regionName) {
 
-        List<CompletableFuture<TripResponse>> placeFutures = courseItems.stream()
+        List<CompletableFuture<TripResponseDto>> placeFutures = courseItems.stream()
                 .map(item -> CompletableFuture.supplyAsync(() ->
                                 searchAndSavePlace(item.getPlace(), targetAreaCode, regionName, item.getReason()),
                         executorService
@@ -438,7 +442,7 @@ public class TripService {
 
         return CompletableFuture.allOf(placeFutures.toArray(new CompletableFuture[0]))
                 .thenApply(v -> {
-                    List<TripResponse> tripResponses = placeFutures.stream()
+                    List<TripResponseDto> tripResponses = placeFutures.stream()
                             .map(CompletableFuture::join)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toList());
@@ -447,7 +451,7 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse searchAndSavePlace(String placeName, String targetAreaCode, String regionName, String reason) {
+    public TripResponseDto searchAndSavePlace(String placeName, String targetAreaCode, String regionName, String reason) {
         // 1. TourAPI 우선 검색
         try {
             JsonNode tourItems = tourApiClient.searchByKeyword(placeName, targetAreaCode, 1, new String[]{"12", "14", "25", "28"});
@@ -476,7 +480,7 @@ public class TripService {
                             });
 
                     if (destination != null) {
-                        TripResponse response = destinationMapper.toTripResponse(destination);
+                        TripResponseDto response = destinationMapper.toTripResponse(destination);
                         response.setReason(reason);
                         return response; // 성공적으로 TourAPI 정보를 찾았으므로 반환
                     }
@@ -504,7 +508,7 @@ public class TripService {
                     destination = destinationRepository.save(newDest);
                 }
 
-                TripResponse response = destinationMapper.toTripResponse(destination);
+                TripResponseDto response = destinationMapper.toTripResponse(destination);
                 response.setReason(reason);
                 return response;
             }
@@ -630,18 +634,18 @@ public class TripService {
         return null;
     }
 
-    private List<TripResponse> optimizeRoute(List<TripResponse> points) {
+    private List<TripResponseDto> optimizeRoute(List<TripResponseDto> points) {
         if (points.size() <= 2) return points;
 
-        List<TripResponse> route = new ArrayList<>();
-        List<TripResponse> unvisited = new ArrayList<>(points);
+        List<TripResponseDto> route = new ArrayList<>();
+        List<TripResponseDto> unvisited = new ArrayList<>(points);
 
-        TripResponse current = unvisited.remove(0);
+        TripResponseDto current = unvisited.remove(0);
         route.add(current);
 
         while (!unvisited.isEmpty()) {
-            TripResponse finalCurrent = current;
-            TripResponse next = unvisited.stream()
+            TripResponseDto finalCurrent = current;
+            TripResponseDto next = unvisited.stream()
                     .min(Comparator.comparingDouble(p -> distance(finalCurrent, p)))
                     .orElse(unvisited.get(0));
 
@@ -653,7 +657,7 @@ public class TripService {
         return route;
     }
 
-    private double distance(TripResponse a, TripResponse b) {
+    private double distance(TripResponseDto a, TripResponseDto b) {
         try {
             double lat1 = Double.parseDouble(a.getMapy());
             double lon1 = Double.parseDouble(a.getMapx());
@@ -672,14 +676,14 @@ public class TripService {
     }
 
     @Transactional
-    private List<TripResponse> getFestivalsByArea(String areaCode) {
+    private List<TripResponseDto> getFestivalsByArea(String areaCode) {
         try {
             if (areaCode == null || areaCode.isEmpty()) {
                 return Collections.emptyList();
             }
 
             JsonNode festivalItems = tourApiClient.searchFestivals(areaCode, 10);
-            List<TripResponse> festivals = new ArrayList<>();
+            List<TripResponseDto> festivals = new ArrayList<>();
 
             if (festivalItems.isArray() && festivalItems.size() > 0) {
                 for (JsonNode festivalNode : festivalItems) {
@@ -719,7 +723,7 @@ public class TripService {
                         });
 
                         if (finalDestination != null) {
-                            TripResponse festival = destinationMapper.toTripResponse(finalDestination);
+                            TripResponseDto festival = destinationMapper.toTripResponse(finalDestination);
                             festival = correctFestivalCoordinates(festival);
                             festivals.add(festival);
                         }
@@ -748,18 +752,18 @@ public class TripService {
         }
     }
 
-    public List<TripResponse> getFestivalsByAreaCode(String areaCode) {
+    public List<TripResponseDto> getFestivalsByAreaCode(String areaCode) {
         try {
             return getFestivalsByArea(areaCode);
         } catch (Exception e) {
             System.err.println("축제 정보 조회 중 오류 발생: " + e.getMessage());
-            return Collections.singletonList(new TripResponse(
+            return Collections.singletonList(new TripResponseDto(
                     "축제 정보 조회 실패", "", "", "오류: " + e.getMessage(), "", "", "", ""
             ));
         }
     }
 
-    private TripResponse correctFestivalCoordinates(TripResponse festival) {
+    private TripResponseDto correctFestivalCoordinates(TripResponseDto festival) {
         // "위대한 축구선수 100인 전" 데이터 보정
         if ("위대한 축구선수 100인 전".equals(festival.getTitle()) &&
                 festival.getAddress() != null &&
