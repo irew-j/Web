@@ -3,20 +3,17 @@ package kr.ac.hs.RandomTrip.auth.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import kr.ac.hs.RandomTrip.auth.dto.LoginRequestDto;
-import kr.ac.hs.RandomTrip.auth.dto.MemberDto;
+import kr.ac.hs.RandomTrip.auth.dto.MemberResponseDto;
 import kr.ac.hs.RandomTrip.auth.security.CustomUser;
 import kr.ac.hs.RandomTrip.auth.service.MemberService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth") // 기본 경로 추가
@@ -58,18 +55,11 @@ public class MemberController {
     @GetMapping("/my-page")
     @Operation(summary = "마이페이지 정보 조회", description = "현재 로그인된 사용자의 정보를 조회합니다.")
     @ResponseBody
-    public MemberDto myPageJWT(Authentication auth) {
+    public MemberResponseDto myPageJWT(Authentication auth) {
+        // Principal 객체를 CustomUser 타입으로 캐스팅
         var user = (CustomUser) auth.getPrincipal();
 
-        MemberDto memberDto = new MemberDto();
-        memberDto.setUsername(user.getUsername());
-        memberDto.setDisplayName(user.displayName);
-        List<String> authorities = user.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)  // 권한 이름을 추출
-                .collect(Collectors.toList());
-
-        memberDto.setAuthorities(authorities);
-
-        return memberDto;
+        // DTO의 정적 팩토리 메소드를 사용하여 간결하게 객체를 생성하고 반환
+        return MemberResponseDto.from(user);
     }
 }
