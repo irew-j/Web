@@ -2,7 +2,7 @@ package kr.ac.hs.RandomTrip.trip.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
+import kr.ac.hs.RandomTrip.trip.dto.TripResponseDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -92,7 +92,7 @@ public class KakaoApiClient {
         return response.path("documents");
     }
 
-    public TripResponse toTripResponse(JsonNode kakaoPlace, String reason) {
+    public TripResponseDto toTripResponse(JsonNode kakaoPlace, String reason) {
         String title = kakaoPlace.path("place_name").asText("장소명 없음");
         String address = kakaoPlace.path("road_address_name").asText("");
         if (address.isEmpty()) {
@@ -129,7 +129,7 @@ public class KakaoApiClient {
 //            description.append("Kakao API를 통해 검색된 장소입니다.");
 //        }
 
-        TripResponse response = new TripResponse(
+        TripResponseDto response = new TripResponseDto(
                 title, address, imageUrl, description.toString(),
                 "", "", mapy, mapx // areaCode, contentTypeId는 빈 문자열
         );

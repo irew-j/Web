@@ -3,7 +3,7 @@ package kr.ac.hs.RandomTrip.trip.mapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import kr.ac.hs.RandomTrip.trip.client.TourApiClient;
 import kr.ac.hs.RandomTrip.trip.domain.Destination;
-import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
+import kr.ac.hs.RandomTrip.trip.dto.TripResponseDto;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -41,8 +41,8 @@ public class DestinationMapper {
     }
 
     // DB에 저장된 Destination 객체를 TripResponse DTO로 변환
-    public TripResponse toTripResponse(Destination destination) {
-        return new TripResponse(
+    public TripResponseDto toTripResponse(Destination destination) {
+        return new TripResponseDto(
                 destination.getId(),
                 destination.getTitle(),
                 destination.getAddress(),

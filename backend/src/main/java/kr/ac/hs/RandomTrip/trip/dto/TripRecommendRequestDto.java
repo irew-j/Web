@@ -1,11 +1,11 @@
 package kr.ac.hs.RandomTrip.trip.dto;
 
-public class TripRecommendRequest {
+public class TripRecommendRequestDto {
     private String query; // 예: '조용하고 힐링할 수 있는 바닷가 여행'
 
-    public TripRecommendRequest() {}
+    public TripRecommendRequestDto() {}
 
-    public TripRecommendRequest(String query) {
+    public TripRecommendRequestDto(String query) {
         this.query = query;
     }
 
