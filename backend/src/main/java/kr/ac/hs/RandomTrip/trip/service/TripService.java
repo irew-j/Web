@@ -1,9 +1,13 @@
 package kr.ac.hs.RandomTrip.trip.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import kr.ac.hs.RandomTrip.trip.client.KakaoApiClient;
+import kr.ac.hs.RandomTrip.trip.client.TourApiClient;
 import kr.ac.hs.RandomTrip.trip.domain.Destination;
 import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequest;
 import kr.ac.hs.RandomTrip.trip.dto.TripResponse;
+import kr.ac.hs.RandomTrip.trip.llm.LlmTravelCourseExtractor;
+import kr.ac.hs.RandomTrip.trip.mapper.DestinationMapper;
 import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
