@@ -28,7 +28,7 @@ public class MemberController {
     @Operation(summary = "회원가입", description = "새로운 회원을 등록합니다.")
     public void addMember(@RequestParam String username,
                           @RequestParam String password,
-                          @RequestParam String displayName) throws Exception {
+                          @RequestParam String displayName) {
         memberService.addMember(username, password, displayName);
     }
 

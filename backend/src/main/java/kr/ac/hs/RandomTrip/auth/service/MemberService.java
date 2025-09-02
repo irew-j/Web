@@ -4,6 +4,8 @@ import kr.ac.hs.RandomTrip.auth.domain.Member;
 import kr.ac.hs.RandomTrip.auth.dto.LoginRequestDto;
 import kr.ac.hs.RandomTrip.auth.repository.MemberRepository;
 import kr.ac.hs.RandomTrip.auth.security.JwtUtil;
+import kr.ac.hs.RandomTrip.exception.BusinessException;
+import kr.ac.hs.RandomTrip.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
@@ -25,12 +27,18 @@ public class MemberService {
     @Transactional
     public void addMember(String username,
                           String password,
-                          String displayName) throws Exception {
-        if(username.length() < 4 || password.length() < 4){
-            throw new Exception("너무 짧음");
+                          String displayName) {
+        // 유효성 검사: 아이디 길이
+        if(username.length() < 4){
+            throw new BusinessException(ErrorCode.USERNAME_TOO_SHORT);
         }
+        // 유효성 검사: 비밀번호 길이
+        if(password.length() < 4){
+            throw new BusinessException(ErrorCode.PASSWORD_TOO_SHORT);
+        }
+        // 유효성 검사: 아이디 중복
         if(memberRepository.findByUsername(username).isPresent()){
-            throw new Exception("존재하는 아이디");
+            throw new BusinessException(ErrorCode.DUPLICATE_USERNAME);
         }
         Member member = new Member();
         member.setUsername(username);
