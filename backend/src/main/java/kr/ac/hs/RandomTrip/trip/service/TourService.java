@@ -40,8 +40,8 @@ public class TourService {
         }
 
         if (closestDestination.getGuide() == null || closestDestination.getGuide().isBlank()) {
-            GeminiGuideGenerator.GuideResponse guideResponse = guideGenerator.generateOneTimeGuide(closestDestination.getTitle());
-            String guideText = guideResponse.getReply(); // 응답 객체에서 실제 텍스트를 추출
+            GeminiGuideGenerator.LLMGuideResponseDto LLMGuideResponseDto = guideGenerator.generateOneTimeGuide(closestDestination.getTitle());
+            String guideText = LLMGuideResponseDto.getReply(); // 응답 객체에서 실제 텍스트를 추출
             closestDestination.setGuide(guideText);
             destinationRepository.save(closestDestination);
         }

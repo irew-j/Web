@@ -33,19 +33,19 @@ public class GuideChatController {
         String userMessage = chatMessage.getMessage();
 
         // 대화 기록을 이어가는 후속 응답 생성
-        GeminiGuideGenerator.GuideResponse guideResponse = geminiGuideGenerator.generateFollowUpGuide(sessionId, userMessage);
+        GeminiGuideGenerator.LLMGuideResponseDto LLMGuideResponseDto = geminiGuideGenerator.generateFollowUpGuide(sessionId, userMessage);
 
         // 클라이언트에게 보낼 응답 메시지 구성
         ChatMessage responseMessage = new ChatMessage();
         responseMessage.setSender("Gemini Guide");
         responseMessage.setReceiver(chatMessage.getSender());
         responseMessage.setDestinationName(chatMessage.getDestinationName());
-        responseMessage.setMessage(guideResponse.getReply());
+        responseMessage.setMessage(LLMGuideResponseDto.getReply());
 
         // 응답에 추천 장소가 포함되어 있는지 여부에 따라 메시지 타입 결정
-        if (guideResponse.getPlaceName() != null && !guideResponse.getPlaceName().isBlank()) {
+        if (LLMGuideResponseDto.getPlaceName() != null && !LLMGuideResponseDto.getPlaceName().isBlank()) {
             responseMessage.setType(ChatMessage.MessageType.RECOMMEND);
-            responseMessage.setPlaceName(guideResponse.getPlaceName());
+            responseMessage.setPlaceName(LLMGuideResponseDto.getPlaceName());
         } else {
             responseMessage.setType(ChatMessage.MessageType.TALK);
         }
@@ -71,7 +71,7 @@ public class GuideChatController {
         headerAccessor.getSessionAttributes().put("destinationName", destinationName);
 
         // 새로운 대화 세션을 시작하는 초기 가이드 응답 생성
-        GeminiGuideGenerator.GuideResponse initialGuide = geminiGuideGenerator.generateInitialGuide(sessionId, destinationName);
+        GeminiGuideGenerator.LLMGuideResponseDto initialGuide = geminiGuideGenerator.generateInitialGuide(sessionId, destinationName);
 
         // 클라이언트에게 보낼 초기 메시지 구성
         ChatMessage initialMessage = new ChatMessage();

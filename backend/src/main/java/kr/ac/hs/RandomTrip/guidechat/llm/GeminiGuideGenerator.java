@@ -46,7 +46,7 @@ public class GeminiGuideGenerator {
      * @param destinationName 사용자가 선택한 여행지 이름
      * @return 생성된 초기 가이드 응답
      */
-    public GuideResponse generateInitialGuide(String sessionId, String destinationName) {
+    public LLMGuideResponseDto generateInitialGuide(String sessionId, String destinationName) {
         // 1. 대화 시작을 위한 초기 프롬프트 생성
         String prompt = String.format(
                 "당신은 '%s'를 위한 전문 여행 가이드입니다. " +
@@ -63,7 +63,7 @@ public class GeminiGuideGenerator {
         history.add(new Content("user", Collections.singletonList(new Part(prompt))));
 
         // 3. Gemini API 호출
-        GuideResponse response = callGeminiApi(history);
+        LLMGuideResponseDto response = callGeminiApi(history);
 
         // 4. API 호출이 성공하면, 세션 ID와 함께 대화 기록 저장
         if (response != null) {
@@ -79,14 +79,14 @@ public class GeminiGuideGenerator {
      * @param userMessage 사용자의 새로운 질문 메시지
      * @return 생성된 후속 가이드 응답
      */
-    public GuideResponse generateFollowUpGuide(String sessionId, String userMessage) {
+    public LLMGuideResponseDto generateFollowUpGuide(String sessionId, String userMessage) {
         // 1. 세션 ID로 기존 대화 기록 조회
         List<Content> history = chatHistories.get(sessionId);
 
         // 2. 대화 기록이 없는 경우 (비정상적인 접근), 오류 로깅 및 기본 응답 반환
         if (history == null) {
             logger.warn("Chat history not found for session id: {}. A new session may be required.", sessionId);
-            return new GuideResponse("세션이 만료되었거나 존재하지 않습니다. 대화를 다시 시작해주세요.", null);
+            return new LLMGuideResponseDto("세션이 만료되었거나 존재하지 않습니다. 대화를 다시 시작해주세요.", null);
         }
 
         // 3. 대화 기록에 새로운 사용자 메시지 추가
@@ -110,7 +110,7 @@ public class GeminiGuideGenerator {
      * @param destinationName 장소 이름
      * @return 생성된 일회성 가이드 응답
      */
-    public GuideResponse generateOneTimeGuide(String destinationName) {
+    public LLMGuideResponseDto generateOneTimeGuide(String destinationName) {
         String prompt = String.format(
                 "당신은 전문 여행 가이드입니다. '%s'에 대해 3문장 이내로 간결하게 소개해주세요. " +
                         "설명에는 그 장소의 역사, 흥미로운 사실, 그리고 방문객에게 도움이 될 만한 실용적인 팁을 반드시 포함하세요. " +
@@ -124,7 +124,7 @@ public class GeminiGuideGenerator {
         return callStatelessGeminiApi(singleContent);
     }
 
-    private GuideResponse callGeminiApi(List<Content> history) {
+    private LLMGuideResponseDto callGeminiApi(List<Content> history) {
         String apiUrl = GEMINI_API_URL + "?key=" + apiKey;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -156,7 +156,7 @@ public class GeminiGuideGenerator {
 
         } catch (Exception e) {
             logger.error("Error calling Gemini API or parsing response: " + e.getMessage(), e);
-            return new GuideResponse("죄송합니다, 지금은 답변할 수 없습니다. 잠시 후 다시 시도해주세요.", null);
+            return new LLMGuideResponseDto("죄송합니다, 지금은 답변할 수 없습니다. 잠시 후 다시 시도해주세요.", null);
         }
     }
 
@@ -165,7 +165,7 @@ public class GeminiGuideGenerator {
      * @param contents API에 보낼 컨텐츠 리스트
      * @return API로부터 받은 응답을 파싱한 GuideResponse 객체
      */
-    private GuideResponse callStatelessGeminiApi(List<Content> contents) {
+    private LLMGuideResponseDto callStatelessGeminiApi(List<Content> contents) {
         String apiUrl = GEMINI_API_URL + "?key=" + apiKey;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -187,7 +187,7 @@ public class GeminiGuideGenerator {
 
         } catch (Exception e) {
             logger.error("Error calling stateless Gemini API or parsing response: " + e.getMessage(), e);
-            return new GuideResponse("죄송합니다, 지금은 답변할 수 없습니다. 잠시 후 다시 시도해주세요.", null);
+            return new LLMGuideResponseDto("죄송합니다, 지금은 답변할 수 없습니다. 잠시 후 다시 시도해주세요.", null);
         }
     }
 
@@ -196,39 +196,44 @@ public class GeminiGuideGenerator {
      * @param rawText API로부터 받은 원본 응답 문자열
      * @return 파싱되었거나 래핑된 GuideResponse 객체
      */
-    private GuideResponse parseOrWrapResponse(String rawText) {
+    private LLMGuideResponseDto parseOrWrapResponse(String rawText) {
         String cleanedText = cleanJsonString(rawText);
         try {
             // JSON으로 파싱 시도
-            return objectMapper.readValue(cleanedText, GuideResponse.class);
+            return objectMapper.readValue(cleanedText, LLMGuideResponseDto.class);
         } catch (Exception e) {
             // 파싱 실패 시, 일반 텍스트 응답으로 간주하고 GuideResponse로 래핑
             logger.warn("Could not parse Gemini response as JSON, wrapping as plain text. Raw: {}", cleanedText);
-            return new GuideResponse(cleanedText, null);
+            return new LLMGuideResponseDto(cleanedText, null);
         }
     }
 
     /**
-     * Gemini API 응답에서 불필요한 마크다운 형식을 제거합니다.
-     * @param rawJson 원본 JSON 문자열
-     * @return 정리된 JSON 문자열
+     * API 응답에서 JSON 객체 부분만 정확히 추출합니다.
+     * 응답 문자열에 포함된 다른 텍스트나 마크다운을 무시합니다.
+     * @param rawText 원본 응답 문자열
+     * @return 추출된 JSON 문자열. 찾지 못하면 파싱 실패를 유도하기 위해 원본을 반환.
      */
-    private String cleanJsonString(String rawJson) {
-        String cleaned = rawJson.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
+    private String cleanJsonString(String rawText) {
+        // 문자열에서 첫 번째 '{'와 마지막 '}'의 위치를 찾습니다.
+        int firstBrace = rawText.indexOf('{');
+        int lastBrace = rawText.lastIndexOf('}');
+
+        // 유효한 JSON 객체 부분을 찾았다면, 해당 부분만 잘라내어 반환합니다.
+        if (firstBrace != -1 && lastBrace != -1 && firstBrace < lastBrace) {
+            return rawText.substring(firstBrace, lastBrace + 1).trim();
         }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        return cleaned.trim();
+
+        // JSON 객체를 찾지 못한 경우, 기존처럼 catch 블록에서 처리되도록 원본을 반환합니다.
+        logger.warn("Could not find a valid JSON object within the raw response: {}", rawText);
+        return rawText;
     }
 
     // --- Service-specific DTO ---
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
-    public static class GuideResponse {
+    public static class LLMGuideResponseDto {
         private String reply;
         private String placeName;
     }
