@@ -1,9 +1,13 @@
 package kr.ac.hs.RandomTrip.guidechat.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.CandidateDto;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.ContentDto;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.GeminiApiResponseDto;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.GeminiRequestDto;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.LLMGuideResponseDto;
+import kr.ac.hs.RandomTrip.guidechat.llm.dto.PartDto;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,7 +42,7 @@ public class GeminiGuideGenerator {
      * 웹소켓 세션 ID를 키로 사용하여 대화 기록을 저장하는 맵.
      * 동시성 문제를 피하기 위해 ConcurrentHashMap을 사용.
      */
-    private final Map<String, List<Content>> chatHistories = new ConcurrentHashMap<>();
+    private final Map<String, List<ContentDto>> chatHistories = new ConcurrentHashMap<>();
 
     /**
      * 새로운 대화 세션을 시작하고 초기 가이드 메시지를 생성합니다.
@@ -59,8 +63,8 @@ public class GeminiGuideGenerator {
         );
 
         // 2. 새로운 대화 기록 리스트 생성 및 초기 프롬프트 추가
-        List<Content> history = new ArrayList<>();
-        history.add(new Content("user", Collections.singletonList(new Part(prompt))));
+        List<ContentDto> history = new ArrayList<>();
+        history.add(new ContentDto("user", Collections.singletonList(new PartDto(prompt))));
 
         // 3. Gemini API 호출
         LLMGuideResponseDto response = callGeminiApi(history);
@@ -81,7 +85,7 @@ public class GeminiGuideGenerator {
      */
     public LLMGuideResponseDto generateFollowUpGuide(String sessionId, String userMessage) {
         // 1. 세션 ID로 기존 대화 기록 조회
-        List<Content> history = chatHistories.get(sessionId);
+        List<ContentDto> history = chatHistories.get(sessionId);
 
         // 2. 대화 기록이 없는 경우 (비정상적인 접근), 오류 로깅 및 기본 응답 반환
         if (history == null) {
@@ -90,7 +94,7 @@ public class GeminiGuideGenerator {
         }
 
         // 3. 대화 기록에 새로운 사용자 메시지 추가
-        history.add(new Content("user", Collections.singletonList(new Part(userMessage))));
+        history.add(new ContentDto("user", Collections.singletonList(new PartDto(userMessage))));
 
         // 4. 업데이트된 대화 기록으로 Gemini API 호출
         return callGeminiApi(history);
@@ -120,27 +124,27 @@ public class GeminiGuideGenerator {
         );
 
         // 일회성 요청이므로, 대화 기록(history) 없이 단일 컨텐츠로 API 호출
-        List<Content> singleContent = Collections.singletonList(new Content("user", Collections.singletonList(new Part(prompt))));
+        List<ContentDto> singleContent = Collections.singletonList(new ContentDto("user", Collections.singletonList(new PartDto(prompt))));
         return callStatelessGeminiApi(singleContent);
     }
 
-    private LLMGuideResponseDto callGeminiApi(List<Content> history) {
+    private LLMGuideResponseDto callGeminiApi(List<ContentDto> history) {
         String apiUrl = GEMINI_API_URL + "?key=" + apiKey;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         // Gemini API 요청 본문 생성
-        GeminiRequest requestBody = new GeminiRequest(history);
-        HttpEntity<GeminiRequest> entity = new HttpEntity<>(requestBody, headers);
+        GeminiRequestDto requestBody = new GeminiRequestDto(history);
+        HttpEntity<GeminiRequestDto> entity = new HttpEntity<>(requestBody, headers);
 
         try {
             // API 호출
-            ResponseEntity<GeminiApiResponse> response = restTemplate.exchange(
-                    apiUrl, HttpMethod.POST, entity, GeminiApiResponse.class
+            ResponseEntity<GeminiApiResponseDto> response = restTemplate.exchange(
+                    apiUrl, HttpMethod.POST, entity, GeminiApiResponseDto.class
             );
 
             // API 응답에서 모델의 답변(Part)을 추출
-            Optional<Part> modelPart = Optional.ofNullable(response.getBody())
+            Optional<PartDto> modelPart = Optional.ofNullable(response.getBody())
                     .flatMap(body -> body.getCandidates().stream().findFirst())
                     .map(candidate -> {
                         // 중요: 모델의 응답을 대화 기록(history)에 추가하여 다음 대화에서 참조하도록 함
@@ -149,7 +153,7 @@ public class GeminiGuideGenerator {
                     });
 
             // 모델의 답변 텍스트를 추출. 없는 경우 기본 메시지 사용.
-            String rawText = modelPart.map(Part::getText)
+            String rawText = modelPart.map(PartDto::getText)
                     .orElse("{\"reply\": \"죄송합니다, 답변을 생성할 수 없습니다.\", \"placeName\": null}");
 
             return parseOrWrapResponse(rawText);
@@ -165,17 +169,17 @@ public class GeminiGuideGenerator {
      * @param contents API에 보낼 컨텐츠 리스트
      * @return API로부터 받은 응답을 파싱한 GuideResponse 객체
      */
-    private LLMGuideResponseDto callStatelessGeminiApi(List<Content> contents) {
+    private LLMGuideResponseDto callStatelessGeminiApi(List<ContentDto> contents) {
         String apiUrl = GEMINI_API_URL + "?key=" + apiKey;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        GeminiRequest requestBody = new GeminiRequest(contents);
-        HttpEntity<GeminiRequest> entity = new HttpEntity<>(requestBody, headers);
+        GeminiRequestDto requestBody = new GeminiRequestDto(contents);
+        HttpEntity<GeminiRequestDto> entity = new HttpEntity<>(requestBody, headers);
 
         try {
-            ResponseEntity<GeminiApiResponse> response = restTemplate.exchange(
-                    apiUrl, HttpMethod.POST, entity, GeminiApiResponse.class
+            ResponseEntity<GeminiApiResponseDto> response = restTemplate.exchange(
+                    apiUrl, HttpMethod.POST, entity, GeminiApiResponseDto.class
             );
 
             String rawText = Optional.ofNullable(response.getBody())
@@ -229,46 +233,4 @@ public class GeminiGuideGenerator {
         return rawText;
     }
 
-    // --- Service-specific DTO ---
-    @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class LLMGuideResponseDto {
-        private String reply;
-        private String placeName;
-    }
-
-    // --- Gemini API DTOs ---
-    @Data
-    @AllArgsConstructor
-    private static class GeminiRequest {
-        private List<Content> contents;
-    }
-
-    @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    private static class Content {
-        private String role; // "user" 또는 "model"
-        private List<Part> parts;
-    }
-
-    @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    private static class Part {
-        private String text;
-    }
-
-    @Data
-    @NoArgsConstructor
-    private static class GeminiApiResponse {
-        private List<Candidate> candidates;
-    }
-
-    @Data
-    @NoArgsConstructor
-    private static class Candidate {
-        private Content content;
-    }
 }

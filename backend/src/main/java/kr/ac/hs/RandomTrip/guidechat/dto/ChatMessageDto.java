@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL) // null인 필드는 JSON 변환 시 제외
-public class ChatMessage {
+public class ChatMessageDto {
     public enum MessageType {
         ENTER, TALK, LEAVE, RECOMMEND
     }

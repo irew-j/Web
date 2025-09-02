@@ -5,7 +5,7 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public class GuideResponse {
+public class GuideResponseDto {
     private String destinationName;
     private String guide;
 }
