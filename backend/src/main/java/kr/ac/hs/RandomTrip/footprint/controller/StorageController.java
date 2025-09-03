@@ -1,8 +1,8 @@
-package kr.ac.hs.RandomTrip.trip.controller;
+package kr.ac.hs.RandomTrip.footprint.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import kr.ac.hs.RandomTrip.trip.service.StorageService;
+import kr.ac.hs.RandomTrip.footprint.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;

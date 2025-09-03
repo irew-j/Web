@@ -9,7 +9,6 @@ import kr.ac.hs.RandomTrip.footprint.dto.FootprintRequestDto;
 import kr.ac.hs.RandomTrip.footprint.dto.FootprintResponseDto;
 import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
 import kr.ac.hs.RandomTrip.footprint.repository.FootprintRepository;
-import kr.ac.hs.RandomTrip.trip.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

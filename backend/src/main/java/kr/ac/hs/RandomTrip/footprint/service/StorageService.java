@@ -1,4 +1,4 @@
-package kr.ac.hs.RandomTrip.trip.service;
+package kr.ac.hs.RandomTrip.footprint.service;
 
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
@@ -14,7 +14,6 @@ import org.springframework.util.StringUtils;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
