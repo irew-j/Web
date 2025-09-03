@@ -9,7 +9,7 @@ import kr.ac.hs.RandomTrip.itinerary.domain.ItineraryItem;
 import kr.ac.hs.RandomTrip.trip.repository.DestinationRepository;
 import kr.ac.hs.RandomTrip.itinerary.repository.ItineraryItemRepository;
 import kr.ac.hs.RandomTrip.itinerary.repository.ItineraryRepository;
-import kr.ac.hs.RandomTrip.trip.service.TripService;
+import kr.ac.hs.RandomTrip.trip.service.PlaceSearchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -29,7 +29,7 @@ public class ItineraryService {
     private final ItineraryItemRepository itineraryItemRepository;
     private final MemberRepository memberRepository;
     private final DestinationRepository destinationRepository;
-    private final TripService tripService; // TripService 주입
+    private final PlaceSearchService placeSearchService;
 
     public ItineraryResponseDto createItinerary(String username, ItineraryRequestDto requestDto) {
         Member member = memberRepository.findByUsername(username)
@@ -84,12 +84,12 @@ public class ItineraryService {
 
     // TripService의 하이브리드 검색 메소드를 사용하도록 수정한 메소드
     public ItineraryItemResponseDto addItemByPlaceName(String username, Long itineraryId, String placeName) {
-        Destination destination = tripService.findTopDestinationByHybridSearch(placeName)
+        Destination destination = placeSearchService.findTopDestinationByHybridSearch(placeName)
                 .orElseThrow(() -> new IllegalArgumentException("'" + placeName + "'에 대한 장소를 찾을 수 없습니다."));
 
         ItineraryItemRequestDto requestDto = new ItineraryItemRequestDto();
         requestDto.setDestinationId(destination.getId());
-        
+
         return addItemToItinerary(username, itineraryId, requestDto);
     }
 

@@ -1,4 +1,4 @@
-package kr.ac.hs.RandomTrip.trip.websocket;
+package kr.ac.hs.RandomTrip.guidechat.websocket;
 
 import kr.ac.hs.RandomTrip.guidechat.llm.GeminiGuideGenerator;
 import lombok.RequiredArgsConstructor;
