@@ -249,24 +249,25 @@ public class LlmTravelCourseExtractor {
         con.setReadTimeout(10000);
 
         String systemPrompt = """
-        당신은 한국 지리 전문가입니다. 사용자의 요청에 따라 도보 여행을 시작하기 좋은, 서로 다른 핵심 장소 **두 곳**을 추천해주세요.
+        당신은 한국 지리 전문가입니다. 사용자의 요청에 따라 도보 여행을 시작하기 좋은, 서로 다른 핵심 장소 **7곳**을 추천해주세요.
 
-        **🎯 핵심 미션: 가장 상징적이고 접근성 좋은 시작점 2곳 추천**
+        **🎯 핵심 미션: 가장 상징적이고 접근성 좋은 시작점 7곳 추천**
 
         **규칙:**
-        1.  **두 개의 장소**: 반드시 서로 다른 장소 두 곳의 이름을 JSON 형식으로 응답해야 합니다.
+        1.  **일곱 개의 장소**: 반드시 서로 다른 장소 일곱 곳의 이름을 JSON 형식으로 응답해야 합니다.
         2.  **공식 명칭**: 지도 앱(카카오맵, 네이버지도)에서 검색 가능한 공식 명칭을 사용해야 합니다.
-        3.  **음식점/카페 제외**: 관광 명소, 공원, 유명 거리, 지하철역 등 공공장소 위주로 추천해주세요.
-        4.  **순수 JSON 출력**: 어떤 설명이나 부연 없이 순수한 JSON 객체만 출력해야 합니다.
+        3.  **음식점/카페 제외**: 관광 명소, 공원, 유명 거리, 등 공공장소 위주로 추천해주세요.
+        4.  **다양성**: 가능한 서로 다른 유형의 장소(예: 공원, 역사 유적, 쇼핑 거리, 자연 경관 등)를 포함시켜 주세요.
+        5.  **순수 JSON 출력**: 어떤 설명이나 부연 없이 순수한 JSON 객체만 출력해야 합니다.
 
         **응답 형식 (순수 JSON만):**
-        {"start_points": ["장소명1", "장소명2"]}
+        {"start_points": ["장소명1", "장소명2", "장소명3", "장소명4", "장소명5", "장소명6", "장소명7"]}
 
         **올바른 예시:**
         - 사용자: "서울 시청 근처에서 역사 테마로 걷기 좋은 곳 추천해줘"
-        - 당신: {"start_points": ["덕수궁", "서울광장"]}
+        - 당신: {"start_points": ["덕수궁", "서울광장", "경복궁", "광화문광장", "정동길", "청계천", "남대문시장"]}
         - 사용자: "부산 광안리에서 바다 보면서 산책 시작할 만한 곳"
-        - 당신: {"start_points": ["광안리해수욕장", "민락수변공원"]}
+        - 당신: {"start_points": ["광안리해수욕장", "민락수변공원", "해운대해수욕장", "동백섬", "APEC나루공원", "더베이101", "마린시티"]}
         """;
 
         ObjectNode requestBody = objectMapper.createObjectNode();
@@ -276,10 +277,10 @@ public class LlmTravelCourseExtractor {
 
         ObjectNode messageUser = objectMapper.createObjectNode();
         messageUser.put("role", "user");
-        messageUser.put("content", "요청: '" + query + "' - 이 요청에 가장 적합한, 서로 다른 도보 여행 시작점 두 곳을 알려주세요.");
+        messageUser.put("content", "요청: '" + query + "' - 이 요청에 가장 적합한, 서로 다른 도보 여행 시작점 일곱 곳을 알려주세요.");
 
         requestBody.putArray("messages").add(messageSystem).add(messageUser);
-        requestBody.put("max_tokens", 100);
+        requestBody.put("max_tokens", 200);
         requestBody.put("temperature", 0.5);
         requestBody.put("response_format", objectMapper.createObjectNode().put("type", "json_object")); // JSON 출력 모드 활성화
 

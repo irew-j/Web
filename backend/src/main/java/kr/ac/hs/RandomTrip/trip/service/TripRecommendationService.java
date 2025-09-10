@@ -48,12 +48,11 @@ public class TripRecommendationService {
         final String originalQuery = request.getQuery();
         String extractedRegion = RegionUtil.getRegionNameFromQuery(originalQuery);
 
-        final String finalRegionName; // 람다 내에서 사용될 final 변수
+        final String finalRegionName;
 
         if (extractedRegion != null && !extractedRegion.isBlank()) {
-            finalRegionName = extractedRegion; // 기존 쿼리에서 지역명 추출 성공
+            finalRegionName = extractedRegion;
         } else {
-            // 쿼리에 지역명이 없을 경우 AI에게 추천 요청
             System.out.println("요청에서 지역명을 찾을 수 없어 AI에게 지역 추천을 요청합니다: " + originalQuery);
             try {
                 String recommendedRegion = llmTravelCourseExtractor.extractRegionFromQuery(originalQuery);
@@ -61,7 +60,7 @@ public class TripRecommendationService {
                     System.err.println("AI가 지역을 추천하지 못했습니다.");
                     return Collections.emptyList();
                 }
-                finalRegionName = recommendedRegion; // AI가 추천한 지역명을 할당
+                finalRegionName = recommendedRegion;
                 System.out.println("AI가 추천한 지역: " + finalRegionName);
             } catch (Exception e) {
                 System.err.println("AI 지역 추천 중 오류 발생: " + e.getMessage());
@@ -71,53 +70,85 @@ public class TripRecommendationService {
 
         final String regionKeyword = finalRegionName.replace("경기도 ", "").replace("특별시", "").replace("광역시", "").replace("시", "");
 
-        // 1. LLM으로 도보 여행 시작점 2개 추천받기 (AI가 추천한 지역명 포함)
+        // 1. LLM으로 도보 여행 시작점 후보 7개 추천받기
         String queryForStartPoints = originalQuery + " (" + finalRegionName + ")";
-        List<String> startPointNames = llmTravelCourseExtractor.extractWalkStartPoints(queryForStartPoints);
-        if (startPointNames == null || startPointNames.isEmpty()) {
-            System.err.println("LLM으로부터 도보 여행 시작점을 추천받지 못했습니다.");
+        List<String> startPointCandidates = llmTravelCourseExtractor.extractWalkStartPoints(queryForStartPoints);
+        if (startPointCandidates == null || startPointCandidates.isEmpty()) {
+            System.err.println("LLM으로부터 도보 여행 시작점 후보를 추천받지 못했습니다.");
+            return Collections.emptyList();
+        }
+        // DEBUG
+        System.out.println("[DEBUG] LLM 추천 후보: " + startPointCandidates);
+
+        // 2. 모든 후보를 병렬로 검색하고 결과를 통합
+        List<CompletableFuture<JsonNode>> searchFutures = startPointCandidates.stream()
+                .map(candidateName -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return kakaoApiClient.searchPlaces(candidateName, finalRegionName);
+                    } catch (Exception e) {
+                        System.err.println("후보 검색 중 오류 발생 (후보: " + candidateName + "): " + e.getMessage());
+                        return null;
+                    }
+                }, executorService))
+                .collect(Collectors.toList());
+
+        CompletableFuture<Void> allSearchesFuture = CompletableFuture.allOf(searchFutures.toArray(new CompletableFuture[0]));
+
+        List<JsonNode> allPlaceResults = allSearchesFuture.thenApply(v ->
+                searchFutures.stream()
+                        .map(CompletableFuture::join)
+                        .filter(Objects::nonNull)
+                        .flatMap(nodes -> {
+                            List<JsonNode> list = new ArrayList<>();
+                            if (nodes.isArray()) {
+                                nodes.forEach(list::add);
+                            }
+                            return list.stream();
+                        })
+                        .collect(Collectors.toList())
+        ).get();
+
+        // 3. 통합된 결과에서 유효한 시작점 2개 이상 확보
+        List<JsonNode> validatedStartPoints = new ArrayList<>();
+        Set<String> addedPlaceIds = new HashSet<>();
+
+        for (JsonNode place : allPlaceResults) {
+            String placeId = place.path("id").asText();
+            String placeName = place.path("place_name").asText();
+            String address = place.path("address_name").asText();
+            String category = place.path("category_group_code").asText();
+
+            // DEBUG
+//            System.out.println("[DEBUG] 검증 대상: " + placeName + " | 주소: " + address + " | 카테고리: " + category + " | 검증키워드: " + regionKeyword);
+
+            if (address.contains(regionKeyword) && ("AT4".equals(category) || "CT1".equals(category)) && !addedPlaceIds.contains(placeId)) {
+                validatedStartPoints.add(place);
+                addedPlaceIds.add(placeId);
+                System.out.println("유효한 시작점 후보 찾음: " + place.path("place_name").asText() + " (ID: " + placeId + ")");
+                if (validatedStartPoints.size() >= 2) {
+                    break; // 목표 개수(2개)를 채우면 중단
+                }
+            }
+        }
+
+        // 3. 유효한 시작점이 1개 미만일 경우 처리
+        if (validatedStartPoints.isEmpty()) {
+            System.err.println("추천된 후보 중 유효한 시작점을 1개 이상 찾지 못했습니다.");
             return Collections.emptyList();
         }
 
-        // 2. 추천받은 시작점들을 검증하고, 유효한 시작점만 병렬로 코스 생성
-        List<CompletableFuture<List<TripResponseDto>>> courseFutures = startPointNames.stream()
-            .map(startPointName -> CompletableFuture.supplyAsync(() -> {
+        // 4. 검증된 시작점을 병렬로 코스 생성 (최대 2개)
+        List<CompletableFuture<List<TripResponseDto>>> courseFutures = validatedStartPoints.stream()
+            .limit(2) // 1개 또는 2개 사용
+            .map(validStartPoint -> CompletableFuture.supplyAsync(() -> {
                 try {
-                    // 시작점 검증 (finalRegionName 사용)
-                    JsonNode placeResults = kakaoApiClient.searchPlaces(startPointName, finalRegionName);
-                    if (placeResults == null || !placeResults.isArray() || placeResults.size() == 0) {
-                        System.err.println("경고: 추천된 시작점을 찾을 수 없음 - " + startPointName);
-                        return null;
-                    }
-
-                    JsonNode validStartPoint = null;
-                    for (JsonNode place : placeResults) {
-                        String address = place.path("address_name").asText();
-                        if (address.contains(regionKeyword)) { // final 변수인 regionKeyword 사용
-                            validStartPoint = place;
-                            break;
-                        }
-                    }
-
-                    if (validStartPoint == null) {
-                        System.err.println("경고: 추천된 시작점이 요청 지역과 일치하는 검색 결과를 찾지 못함 - " + startPointName);
-                        return null;
-                    }
-
-                    // 검증 통과, 코스 생성 (finalRegionName, regionKeyword 사용)
                     return createSingleWalkCourse(validStartPoint, finalRegionName, regionKeyword);
                 } catch (Exception e) {
-                    System.err.println("도보 코스 생성 중 오류 발생 (시작점: " + startPointName + "): " + e.getMessage());
+                    System.err.println("도보 코스 생성 중 오류 발생 (시작점: " + validStartPoint.path("place_name").asText() + "): " + e.getMessage());
                     return null;
                 }
             }, executorService))
-            .filter(Objects::nonNull)
             .collect(Collectors.toList());
-
-        if (courseFutures.isEmpty()) {
-            System.err.println("검증을 통과한 유효한 시작점이 없습니다.");
-            return Collections.emptyList();
-        }
 
         CompletableFuture<Void> allCoursesFuture = CompletableFuture.allOf(courseFutures.toArray(new CompletableFuture[0]));
 
