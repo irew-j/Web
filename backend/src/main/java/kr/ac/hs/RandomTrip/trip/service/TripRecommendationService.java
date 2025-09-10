@@ -93,14 +93,18 @@ public class TripRecommendationService {
                     JsonNode validStartPoint = null;
                     for (JsonNode place : placeResults) {
                         String address = place.path("address_name").asText();
-                        if (address.contains(regionKeyword)) { // final 변수인 regionKeyword 사용
+                        String category = place.path("category_group_code").asText();
+
+                        // 주소와 카테고리를 모두 확인 (AT4: 관광명소, CT1: 문화시설)
+                        if (address.contains(regionKeyword) && ("AT4".equals(category) || "CT1".equals(category))) {
                             validStartPoint = place;
+                            System.out.println("유효한 시작점 찾음: " + place.path("place_name").asText() + " (카테고리: " + category + ")");
                             break;
                         }
                     }
 
                     if (validStartPoint == null) {
-                        System.err.println("경고: 추천된 시작점이 요청 지역과 일치하는 검색 결과를 찾지 못함 - " + startPointName);
+                        System.err.println("경고: 추천된 시작점 중 요청 지역과 일치하고 여행지에 적합한 카테고리(AT4, CT1)의 장소를 찾지 못함 - " + startPointName);
                         return null;
                     }
 
