@@ -30,6 +30,8 @@ spring.jpa.hibernate.ddl-auto=update
 # JWT 토큰을 서명하고 검증하기 위한 시크릿 키. 길고 복잡한 문자열을 사용하세요.
 jwt.secret=your-super-secret-key-that-is-long-and-secure
 
+# 위치 인증 거리(2000미터)
+location.auth.max-distance-meters=2000
 
 # ==================================
 #            EXTERNAL APIS

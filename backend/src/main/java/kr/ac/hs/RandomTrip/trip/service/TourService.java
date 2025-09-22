@@ -12,6 +12,7 @@ import kr.ac.hs.RandomTrip.itinerary.domain.ItineraryItem;
 import kr.ac.hs.RandomTrip.itinerary.repository.ItineraryItemRepository;
 import kr.ac.hs.RandomTrip.trip.repository.VisitRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +30,8 @@ public class TourService {
     private final GeminiGuideGenerator guideGenerator;
     private final ItineraryItemRepository itineraryItemRepository;
 
-    private static final double MAX_DISTANCE_METERS = 500.0; // 500미터
+    @Value("${location.auth.max-distance-meters}")
+    private int maxDistanceMeters;
 
     @Transactional(readOnly = true)
     public Optional<GuideResponseDto> getGuideForCurrentLocation(double lat, double lon) {
@@ -60,7 +62,7 @@ public class TourService {
         Destination destination = destinationOpt.get();
         double distance = calculateDistance(lat, lon, Double.parseDouble(destination.getMapy()), Double.parseDouble(destination.getMapx()));
 
-        if (distance <= MAX_DISTANCE_METERS) {
+        if (distance <= maxDistanceMeters) {
             String username = SecurityContextHolder.getContext().getAuthentication().getName();
             Member member = memberRepository.findByUsername(username)
                     .orElseThrow(() -> new RuntimeException("User not found"));
@@ -90,7 +92,7 @@ public class TourService {
                 double destLat = Double.parseDouble(destination.getMapy());
                 double destLon = Double.parseDouble(destination.getMapx());
                 double distance = calculateDistance(lat, lon, destLat, destLon);
-                if (distance < minDistance && distance <= MAX_DISTANCE_METERS) {
+                if (distance < minDistance && distance <= maxDistanceMeters) {
                     minDistance = distance;
                     closest = destination;
                 }
