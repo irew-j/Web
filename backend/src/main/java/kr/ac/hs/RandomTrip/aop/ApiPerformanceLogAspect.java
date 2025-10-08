@@ -15,7 +15,7 @@ public class ApiPerformanceLogAspect {
     private static final Logger performanceLogger = LoggerFactory.getLogger("performance.logger");
 
     // kr.ac.hs.RandomTrip 패키지 내의 모든 Controller 클래스의 모든 public 메소드에 적용됩니다.
-    @Around("execution(* kr.ac.hs.RandomTrip..*Controller.*(..))")
+    @Around("execution(* kr.ac.hs.RandomTrip..*Controller.*(..)) || @annotation(org.springframework.messaging.handler.annotation.MessageMapping)")
     public Object logApiPerformance(ProceedingJoinPoint joinPoint) throws Throwable {
         long startTime = System.currentTimeMillis();
         String methodName = joinPoint.getSignature().toShortString();
