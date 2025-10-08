@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- 콘솔 Appender 설정 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 성능 로그 파일 Appender 설정 -->
+    <appender name="PERFORMANCE_LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>./logs/performance.log</file> <!-- 로그 파일 경로 -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- 매일 새로운 로그 파일 생성 -->
+            <fileNamePattern>./logs/performance.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- 30일간 로그 보관 -->
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <!-- 로그 포맷 -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 성능 로거 설정 -->
+    <!-- Aspect에서 "performance.logger"로 생성한 로거에 대한 설정입니다. -->
+    <logger name="performance.logger" level="INFO" additivity="false">
+        <appender-ref ref="PERFORMANCE_LOG" />
+    </logger>
+
+    <!-- 기본 Spring Boot 로거 설정 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+
+</configuration>
