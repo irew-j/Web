@@ -51,3 +51,15 @@ export const fetchDirections = async (originLat, originLng, destLat, destLng) =>
     });
     return response.data;
 };
+
+export const searchDestination = async (placeName) => {
+    try {
+        const response = await axios.get(`${BASE_URL}/api/trip/destination/search`, {
+            params: { title: placeName }
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Error searching destination:", error);
+        throw error;
+    }
+};

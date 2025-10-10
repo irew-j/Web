@@ -133,7 +133,9 @@ const HomePage = () => {
                     TripLovers
                 </h1>
                 <p className="text-xl text-gray-600 font-medium mb-2">당신만의 특별한 여행을 찾아보세요</p>
-                <p className="text-base text-gray-400">키워드와 지역을 입력하면 맞춤 여행 코스를 추천해드려요!</p>
+                <p className="text-base text-gray-400 mb-6">키워드와 지역을 입력하면 맞춤 여행 코스를 추천해드려요!</p>
+
+                
             </div>
 
             <div className="flex justify-center gap-4 mb-8">
@@ -149,12 +151,12 @@ const HomePage = () => {
                 >
                     <FaCar /> 자동차
                 </button>
-                <button
+                {/* <button
                     onClick={() => setTravelMode("TRANSIT")}
                     className={`flex items-center gap-2 px-5 py-2 rounded-full border transition-all duration-200 ${travelMode === "TRANSIT" ? "bg-teal-500 text-white border-teal-600 shadow-md" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"}`}
                 >
                     <FaSubway /> 대중교통
-                </button>
+                </button> */}
             </div>
 
             <SearchBar

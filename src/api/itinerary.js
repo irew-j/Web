@@ -36,15 +36,20 @@ export const getItineraryDetails = async (itineraryId) => {
 };
 
 // 일정에 장소 추가 (POST /api/itineraries/{itineraryId}/items)
-export const addItemToItinerary = async (itineraryId, itemData) => {
-    console.log("Sending itemData to addItemToItinerary:", itemData); // Added for debugging
+export const addItemToItinerary = async (itineraryId, itemData) => { // 인자 변경: itineraryId와 itemData를 받도록 수정
+    console.log("addItemToItinerary called with itineraryId:", itineraryId, "and itemData:", itemData); // 로그 내용 수정
     const token = localStorage.getItem('authToken'); // Get token from localStorage
-    const response = await axios.post(`${BASE_URL}/api/itineraries/${itineraryId}/items`, itemData, {
-        headers: {
-            Authorization: `Bearer ${token}` // Include token in headers
-        }
-    });
-    return response.data;
+    try {
+        const response = await axios.post(`${BASE_URL}/api/itineraries/${itineraryId}/items`, itemData, { // 'api' 대신 'axios' 사용
+            headers: {
+                Authorization: `Bearer ${token}` // Include token in headers
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error adding item to itinerary:', error);
+        throw error;
+    }
 };
 
 // 일정에서 장소 삭제 (DELETE /api/itineraries/items/{itemId})

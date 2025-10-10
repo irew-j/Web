@@ -31,18 +31,18 @@ const CustomItineraryPage = () => {
     navigate("/");
   };
 
-    return (
-        <div className="max-w-4xl mx-auto">
-            <button
-                onClick={goToMainView}
-                className="mb-8 flex items-center text-teal-600 hover:text-teal-800 transition-colors duration-200 text-lg font-medium"
-            >
-                <FaArrowLeft className="mr-2" />
-                메인으로 돌아가기
-            </button>
-            <CustomItinerary initialPlaces={initialPlaces} />
-        </div>
-    );
+  return (
+    <div className="max-w-4xl mx-auto">
+      <button
+        onClick={goToMainView}
+        className="mb-8 flex items-center text-teal-600 hover:text-teal-800 transition-colors duration-200 text-lg font-medium"
+      >
+        <FaArrowLeft className="mr-2" />
+        메인으로 돌아가기
+      </button>
+      <CustomItinerary initialPlaces={initialPlaces} />
+    </div>
+  );
 };
 
 export default CustomItineraryPage;

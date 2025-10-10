@@ -40,7 +40,11 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    define: {
+      global: 'window',
+    },
     server: {
+      host: true,
       proxy: {
         '/api': {
           target: env.VITE_API_BASE_URL,

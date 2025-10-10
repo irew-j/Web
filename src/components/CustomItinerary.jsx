@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import {
     FaPlus,
     FaTimes,
@@ -31,8 +31,9 @@ import {
     FaRuler,
     FaExclamationTriangle,
     FaCheckCircle,
+    FaGripVertical,
 } from "react-icons/fa"
-import { fetchDirections } from '../api/trip';
+import { fetchDirections, searchDestination } from '../api/trip';
 import { fetchFestivals } from '../api/festivals';
 import { verifyTourLocation } from '../api/tour';
 import {
@@ -45,13 +46,91 @@ import {
     updateItinerary,
     getItineraryDetails // Added for fetching itinerary details
 } from "../api/itinerary";
+import { createFootprint } from '../api/footprints';
+import FootprintAuthModal from './FootprintAuthModal';
+import FootprintFloatingButton from './FootprintFloatingButton';
 import { useParams } from "react-router-dom";
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+
+// 발자국 인증 상태 관리를 위한 훅 추가
+const useFootprintVerificationStatus = (itineraryId, places) => {
+    const [verifyStatus, setVerifyStatus] = useState({});
+    const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+
+    // 발자국 인증 상태 로드
+    const loadVerificationStatus = useCallback(async () => {
+        if (!itineraryId || !places.length) {
+            setIsLoadingStatus(false);
+            return;
+        }
+
+        try {
+            // 로컬 스토리지에서 먼저 확인
+            const storedStatus = localStorage.getItem(`footprint_status_${itineraryId}`);
+            if (storedStatus) {
+                const parsedStatus = JSON.parse(storedStatus);
+                setVerifyStatus(parsedStatus);
+            }
+
+            // 서버에서 발자국 데이터 가져오기
+            const footprints = await getFootprints();
+
+            // 현재 일정의 장소들에 대한 발자국 확인
+            const currentItineraryFootprints = footprints.filter(footprint => {
+                return places.some(place => place.id === footprint.destinationId);
+            });
+
+            // 인증 상태 업데이트
+            const newVerifyStatus = {};
+            places.forEach(place => {
+                const hasFootprint = currentItineraryFootprints.some(
+                    footprint => footprint.destinationId === place.id
+                );
+                newVerifyStatus[place.id] = hasFootprint ? 'success' : 'pending';
+            });
+
+            setVerifyStatus(newVerifyStatus);
+
+            // 로컬 스토리지에 저장
+            localStorage.setItem(`footprint_status_${itineraryId}`, JSON.stringify(newVerifyStatus));
+        } catch (error) {
+            console.error('발자국 인증 상태 로드 실패:', error);
+        } finally {
+            setIsLoadingStatus(false);
+        }
+    }, [itineraryId, places]);
+
+    // 인증 상태 업데이트
+    const updateVerificationStatus = useCallback((placeId, status) => {
+        setVerifyStatus(prev => {
+            const newStatus = { ...prev, [placeId]: status };
+            // 로컬 스토리지에 저장
+            localStorage.setItem(`footprint_status_${itineraryId}`, JSON.stringify(newStatus));
+            return newStatus;
+        });
+    }, [itineraryId]);
+
+    // 컴포넌트 마운트 시 상태 로드
+    useEffect(() => {
+        loadVerificationStatus();
+    }, [loadVerificationStatus]);
+
+    return {
+        verifyStatus,
+        isLoadingStatus,
+        updateVerificationStatus,
+        refreshVerificationStatus: loadVerificationStatus
+    };
+};
 
 const CustomItinerary = ({ initialPlaces = [] }) => {
     const { itineraryId } = useParams();
     const [places, setPlaces] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState([]);
+    const [activeResultIndex, setActiveResultIndex] = useState(-1); // For keyboard navigation
+    const searchContainerRef = useRef(null); // To scroll active item into view
+    const searchInputRef = useRef(null); // To detect clicks outside search input and results
     const [mapInstance, setMapInstance] = useState(null);
     const [markers, setMarkers] = useState([]);
     const [polylines, setPolylines] = useState([]);
@@ -498,112 +577,37 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
     }, [isMapReady, mapInstance, places]);
 
     // 검색 결과 처리
-    const handleSearch = (e) => {
+    const handleSearch = async (e) => {
         e.preventDefault();
-        if (!searchBoxRef.current || !mapInstance) return;
-
-        // 엔터로 검색 시, 결과가 있으면 첫 번째 결과를 추가
-        if (searchResults && searchResults.length > 0) {
-            addPlace(searchResults[0]);
-            setSearchResults([]); // 결과창 닫기
-            setSearchQuery(""); // 입력창 초기화(선택)
+        if (!searchQuery) {
+            setSearchResults([]);
             return;
         }
 
-        let isMounted = true;
-        let searchTimeout = null;
-
-        const processSearch = () => {
-            try {
-                const searchBox = new window.google.maps.places.SearchBox(searchBoxRef.current);
-
-                // 검색 범위 설정
-                const bounds = mapInstance.getBounds();
-                if (bounds) {
-                    searchBox.setBounds(bounds);
-                }
-
-                // 검색 이벤트 리스너
-                const searchListener = searchBox.addListener("places_changed", () => {
-                    if (!isMounted) return;
-
-                    try {
-                        const places = searchBox.getPlaces();
-                        if (!places || places.length === 0) {
-                            setSearchResults([]);
-                            return;
-                        }
-
-                        const results = places.map((place) => {
-                            try {
-                                if (!place.geometry || !place.geometry.location) {
-                                    return null;
-                                }
-
-                                return {
-                                    id: place.place_id,
-                                    title: place.name,
-                                    address: place.formatted_address || place.vicinity,
-                                    mapx: place.geometry.location.lng(),
-                                    mapy: place.geometry.location.lat(),
-                                    imageUrl: place.photos && place.photos[0] ? place.photos[0].getUrl({ maxWidth: 400 }) : null,
-                                    rating: place.rating || 0,
-                                    userRatingsTotal: place.user_ratings_total || 0
-                                };
-                            } catch (error) {
-                                console.error("Error processing place:", error);
-                                return null;
-                            }
-                        }).filter(Boolean);
-
-                        if (isMounted) {
-                            setSearchResults(results);
-                        }
-                    } catch (error) {
-                        console.error("Error processing search results:", error);
-                        if (isMounted) {
-                            setSearchResults([]);
-                        }
-                    }
-                });
-
-                // 이벤트 리스너 정리
-                return () => {
-                    if (searchListener) {
-                        window.google.maps.event.removeListener(searchListener);
-                    }
-                };
-            } catch (error) {
-                console.error("Error setting up search:", error);
-                if (isMounted) {
-                    setSearchResults([]);
-                }
-                return () => { };
+        try {
+            const response = await searchDestination(searchQuery);
+            if (response && Array.isArray(response)) {
+                const results = response.map(place => ({
+                    id: place.id, // Assuming backend provides a unique ID
+                    title: place.title,
+                    address: place.address,
+                    mapx: place.mapx, // Assuming backend provides mapx (longitude)
+                    mapy: place.mapy, // Assuming backend provides mapy (latitude)
+                    imageUrl: place.imageUrl || null, // Optional: if backend provides image URL
+                    rating: place.rating || 0,
+                    userRatingsTotal: place.userRatingsTotal || 0
+                }));
+                setSearchResults(results);
+                setActiveResultIndex(-1); // Reset active index on new search
+            } else {
+                setSearchResults([]);
+                setActiveResultIndex(-1);
             }
-        };
-
-        // 디바운스 처리
-        if (searchTimeout) {
-            clearTimeout(searchTimeout);
+        } catch (error) {
+            console.error("Error during destination search:", error);
+            setSearchResults([]);
+            setActiveResultIndex(-1);
         }
-
-        searchTimeout = setTimeout(() => {
-            const cleanup = processSearch();
-            return () => {
-                isMounted = false;
-                cleanup();
-                if (searchTimeout) {
-                    clearTimeout(searchTimeout);
-                }
-            };
-        }, 300);
-
-        return () => {
-            isMounted = false;
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
-            }
-        };
     };
 
     // 검색 결과 렌더링
@@ -611,15 +615,20 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
         if (!searchResults || searchResults.length === 0) return null;
 
         return (
-            <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg max-h-60 overflow-auto border border-gray-200">
-                {searchResults.map((result) => (
+            <div
+                className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg max-h-60 overflow-auto border border-gray-200"
+                ref={searchContainerRef}
+            >
+                {searchResults.map((result, index) => (
                     <div
                         key={result.id}
-                        className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors"
+                        className={`p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors ${index === activeResultIndex ? 'bg-gray-100' : ''}`}
                         onClick={() => addPlace(result)}
+                        onMouseEnter={() => setActiveResultIndex(index)} // Allow mouse hover to change active item
+                        ref={index === activeResultIndex ? el => el && el.scrollIntoView({ block: 'nearest' }) : null} // Scroll active item into view
                     >
                         <div className="flex justify-between items-start">
-                            <div>
+                            <div className="flex-grow">
                                 <p className="font-medium text-gray-800">{result.title}</p>
                                 <p className="text-sm text-gray-600">{result.address}</p>
                                 {result.rating > 0 && (
@@ -631,7 +640,14 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                                     </div>
                                 )}
                             </div>
-                            <button className="text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 p-1 rounded-full transition-colors">
+                            {result.imageUrl && (
+                                <img
+                                    src={result.imageUrl}
+                                    alt={result.title}
+                                    className="w-16 h-16 object-cover rounded-md ml-3 flex-shrink-0"
+                                />
+                            )}
+                            <button className="text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 p-1 rounded-full transition-colors ml-2">
                                 <FaPlus />
                             </button>
                         </div>
@@ -835,45 +851,10 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
     };
 
     // 장소 추가
-    const addPlace = async (place) => {
+    const addPlace = async (placeData) => {
         try {
-            if (!place) {
-                console.error("Invalid place data");
+            if (!placeData || !placeData.title || !placeData.address || !placeData.mapx || !placeData.mapy) {
                 setToastMessage("유효하지 않은 장소 데이터입니다.");
-                setShowToast(true);
-                return;
-            }
-
-            // 장소 데이터 구조 확인 및 변환
-            let rawId = String(place.place_id ?? place.id ?? `${Date.now()}-${Math.random()}`); // Ensure ID is always a string
-
-            const placeData = {
-                id: rawId,
-                title: place.name || place.title || '', // Ensure title is not empty
-                address: place.vicinity || place.formatted_address || place.address || '', // Ensure address is not empty
-                mapx: parseFloat(place.geometry?.location?.lng?.() ?? place.mapx) || 0,
-                mapy: parseFloat(place.geometry?.location?.lat?.() ?? place.mapy) || 0,
-                imageUrl: (place.photos && place.photos[0] ? place.photos[0].getUrl({ maxWidth: 400 }) : place.imageUrl) || null,
-                rating: place.rating || 0,
-                userRatingsTotal: place.user_ratings_total || place.userRatingsTotal || 0,
-                opening_hours: place.opening_hours || null,
-                price_level: place.price_level || null,
-                website: place.website || null,
-                formatted_phone_number: place.formatted_phone_number || null
-            };
-
-            // 필수 데이터 검증
-            if (!placeData.title) {
-                console.error("장소 이름이 없습니다:", place);
-                setToastMessage("장소 정보가 불완전합니다.");
-                setShowToast(true);
-                return;
-            }
-
-            // 위치 정보 검증
-            if (!placeData.mapx || !placeData.mapy) {
-                console.error("위치 정보가 없습니다:", place);
-                setToastMessage("위치 정보가 없는 장소는 추가할 수 없습니다.");
                 setShowToast(true);
                 return;
             }
@@ -891,16 +872,16 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
             }
 
             if (itineraryId) {
-                // API를 통해 일정에 장소 추가
                 try {
-                    // Modified: Send the full placeData object as destination
-                    await addItemToItinerary(itineraryId, { destination: placeData });
+                    // Search for the destination to get the numerical ID
+                    // The placeData already contains the ID from the backend search, so we can use it directly.
+                    let destinationIdToSend = placeData.id;
+
+                    await addItemToItinerary(itineraryId, { destinationId: destinationIdToSend });
                     setToastMessage("장소가 일정에 추가되었습니다!");
                 } catch (error) {
                     console.error('API를 통한 장소 추가 실패:', error);
-                    setToastMessage("API를 통한 장소 추가에 실패했습니다.");
-                    setShowToast(true);
-                    return;
+                    setToastMessage("장소 추가에 실패했습니다.");
                 }
             }
 
@@ -918,6 +899,7 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
 
             setSearchResults([]);
             setSearchQuery("");
+            setActiveResultIndex(-1); // Reset active index after adding place
             setToastMessage("장소가 추가되었습니다!");
             setShowToast(true);
         } catch (error) {
@@ -1302,32 +1284,49 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
 
             // Remove old items
             for (const item of itemsToRemove) {
-                await removeItemFromItinerary(item.id); // Use item.id for removal
+                try {
+                    await removeItemFromItinerary(item.id); // Use item.id for removal
+                } catch (error) {
+                    console.error(`Error removing item ${item.id} from itinerary:`, error);
+                }
             }
 
-            // Add new items
+
+            // Add new items with proper numerical destination IDs
             for (const place of itemsToAdd) {
-                await addItemToItinerary(currentItineraryId, {
-                    // Removed 'destination' wrapper, sending place data directly
-                    id: place.id,
-                    title: place.title,
-                    mapx: place.mapx,
-                    mapy: place.mapy,
-                    address: place.address,
-                    imageUrl: place.imageUrl || null,
-                    rating: place.rating || 0,
-                    userRatingsTotal: place.userRatingsTotal || 0,
-                    opening_hours: place.opening_hours || null,
-                    price_level: place.price_level || null,
-                    website: place.website || null,
-                    formatted_phone_number: place.formatted_phone_number || null,
-                    description: place.description || null, // 추가
-                    reason: place.reason || null, // 추가
-                    areaCode: place.areaCode || null, // 추가
-                    contentTypeId: place.contentTypeId || null, // 추가
-                    festivalPeriod: place.festivalPeriod || null // 추가
-                });
+                try {
+                    // First search for the destination to get the numerical ID
+                    const searchResult = await searchDestination(place.title);
+
+                    // Check if searchResult is an array and get the first item's ID, or directly use searchResult.id
+                    const destinationId = Array.isArray(searchResult) && searchResult.length > 0
+                        ? searchResult[0].id
+                        : searchResult?.id;
+
+                    if (!destinationId) {
+                        console.error(`Could not find destination ID for place: ${place.title}`);
+                        continue;
+                    }
+
+                    await addItemToItinerary(currentItineraryId, {
+                        destinationId: destinationId // Use the numerical ID from search
+                    });
+
+                    setPlaces((prevPlaces) =>
+                        prevPlaces.map((p) =>
+                            p.id === place.id ? { ...p, isAdded: true } : p
+                        )
+                    );
+                } catch (error) {
+                    console.error(`Error adding item ${place.id} to itinerary:`, error);
+                }
             }
+
+            // Save/update operations are complete, now re-fetch the updated itinerary details
+            const updatedItineraryDetails = await getItineraryDetails(currentItineraryId);
+            setSavedItineraries(prev => prev.map(it =>
+                it.id === updatedItineraryDetails.id ? { ...updatedItineraryDetails, itemCount: updatedItineraryDetails.items.length } : it
+            ));
 
             setShowToast(true);
 
@@ -1482,7 +1481,7 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                             </div>
                         </div>
                         <p className="text-xs text-gray-500 mb-2">
-                            {new Date(itinerary.createdAt).toLocaleDateString()} 생성 • {itinerary.places?.length || 0}개 장소
+                            {new Date(itinerary.createdAt).toLocaleDateString()} 생성 • {itinerary.itemCount || 0}개 장소
                         </p>
                         <div className="flex flex-wrap gap-1">
                             {itinerary.places && itinerary.places.slice(0, 3).map((place, idx) => (
@@ -1652,6 +1651,32 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
         setActiveMenuTab('directions'); // 탭 전환
     };
 
+    // 검색 결과 외부 클릭 및 Esc 키 감지
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (searchInputRef.current && !searchInputRef.current.contains(event.target) &&
+                searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+                setSearchResults([]);
+                setActiveResultIndex(-1);
+            }
+        };
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setSearchResults([]);
+                setActiveResultIndex(-1);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, []);
+
     // 일정관리 UI를 함수로 분리
     const renderItineraryMenu = () => (
         <>
@@ -1661,11 +1686,27 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                     <div className="relative flex-grow">
                         <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
-                            ref={searchBoxRef}
+                            ref={searchInputRef} // Add ref to the input
                             type="text"
                             placeholder="장소 검색 (예: 경복궁, 명동, 카페...)"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    setActiveResultIndex(prevIndex =>
+                                        (prevIndex + 1) % searchResults.length
+                                    );
+                                } else if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    setActiveResultIndex(prevIndex =>
+                                        (prevIndex - 1 + searchResults.length) % searchResults.length
+                                    );
+                                } else if (e.key === 'Enter' && activeResultIndex !== -1) {
+                                    e.preventDefault();
+                                    addPlace(searchResults[activeResultIndex]);
+                                }
+                            }}
                             className="pl-12 p-3 w-full border border-gray-300 rounded-l-xl focus:ring-2 focus:ring-teal-400 focus:border-teal-400 shadow-sm text-base"
                         />
                     </div>
@@ -1686,71 +1727,96 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
             ) : (
                 <>
                     {/* 내 일정(places) 리스트에만 인증 버튼/뱃지 적용 */}
-                    <ul className="space-y-3">
-                        {places.map((place, index) => (
-                            <li
-                                key={place.id}
-                                className={
-                                    `relative bg-white p-4 pt-7 pr-7 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 group cursor-pointer border border-gray-100${activePlace === index ? " border-2 border-teal-500" : ""}`
-                                }
-                                onClick={() => {
-                                    setActivePlace(index);
-                                    setSelectedPlaceForNearby(place);
-                                    setSelectedPlaceForDetail(place);
-                                    setSelectedPlaceDetails(null); // 상세 정보 초기화
-                                }}
-                            >
-                                {/* X 삭제 버튼 - 카드 오른쪽 상단 모서리 바깥쪽 */}
-                                <button
-                                    className="absolute -right-3 -top-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/90 hover:bg-red-500 hover:text-white text-gray-400 border border-gray-200 shadow-lg transition-all duration-200 z-30"
-                                    title="장소 삭제"
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        removePlace(index);
-                                    }}
+                    <DragDropContext
+                        onDragEnd={(result) => {
+                            const { source, destination } = result;
+                            if (!destination || source.index === destination.index) return;
+                            movePlace(source.index, destination.index);
+                        }}
+                    >
+                        <Droppable droppableId="places-list">
+                            {(provided, snapshot) => (
+                                <ul
+                                    className={`space-y-4 transition-all duration-300 ${snapshot.isDraggingOver ? 'bg-teal-50/60 rounded-xl p-2' : ''}`}
+                                    ref={provided.innerRef}
+                                    {...provided.droppableProps}
                                 >
-                                    <FaTimes className="w-4 h-4" />
-                                </button>
-                                <div className="flex flex-col min-w-0 w-full">
-                                    <span className="font-bold text-teal-700 text-base truncate">{place.title}</span>
-                                    <span className="block text-sm text-gray-600 truncate">{place.address}</span>
-                                    {/* 위치 인증 버튼/뱃지: 카드 하단 오른쪽에 깔끔하게 */}
-                                    <div className="mt-3 flex justify-end w-full">
-                                        {verifyStatus[place.id] === 'success' ? (
-                                            <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 text-white font-bold shadow animate-fade-in">
-                                                <FaCheckCircle className="w-5 h-5" /> 인증 완료
-                                            </span>
-                                        ) : verifyStatus[place.id] === 'pending' ? (
-                                            <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 text-white font-semibold shadow animate-pulse">
-                                                <FaSpinner className="animate-spin w-5 h-5" /> 인증 중...
-                                            </span>
-                                        ) : verifyStatus[place.id] === 'fail' ? (
-                                            <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold shadow animate-shake">
-                                                <FaExclamationTriangle className="w-5 h-5" /> 실패
-                                                <button
-                                                    className="ml-2 underline text-xs text-white hover:text-yellow-200"
-                                                    onClick={e => {
-                                                        e.stopPropagation();
-                                                        handleVerifyLocation(place);
+                                    {places.map((place, index) => (
+                                        <Draggable key={place.id} draggableId={String(place.id)} index={index}>
+                                            {(provided, snapshot) => (
+                                                <li
+                                                    ref={provided.innerRef}
+                                                    {...provided.draggableProps}
+                                                    className={`relative flex items-center gap-4 bg-white p-5 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group cursor-pointer select-none ${activePlace === index ? 'border-2 border-teal-500 ring-2 ring-teal-200' : ''} ${snapshot.isDragging ? 'scale-[1.02] shadow-2xl z-20' : ''}`}
+                                                    onClick={() => {
+                                                        setActivePlace(index);
+                                                        setSelectedPlaceForNearby(place);
+                                                        setSelectedPlaceForDetail(place);
+                                                        setSelectedPlaceDetails(null); // 상세 정보 초기화
                                                     }}
-                                                >재시도</button>
-                                            </span>
-                                        ) : (
-                                            <button
-                                                className="px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-md flex items-center gap-2 hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
-                                                onClick={e => {
-                                                    e.stopPropagation();
-                                                    handleVerifyLocation(place);
-                                                }}
-                                            >
-                                                <FaMapMarkerAlt className="w-4 h-4" /> 위치 인증
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
+                                                >
+                                                    {/* 드래그 핸들 */}
+                                                    <span {...provided.dragHandleProps} className="flex items-center mr-2 text-gray-300 hover:text-teal-400 cursor-grab active:cursor-grabbing">
+                                                        <FaGripVertical className="w-5 h-5" />
+                                                    </span>
+                                                    {/* 삭제 버튼 */}
+                                                    <button
+                                                        className="absolute -right-3 -top-3 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 hover:bg-red-500 hover:text-white text-gray-400 border border-gray-200 shadow-lg transition-all duration-200 z-30"
+                                                        title="장소 삭제"
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            removePlace(index);
+                                                        }}
+                                                    >
+                                                        <FaTimes className="w-5 h-5" />
+                                                    </button>
+                                                    {/* 장소 정보 */}
+                                                    <div className="flex flex-col min-w-0 w-full">
+                                                        <span className="font-bold text-lg text-gray-800 truncate mb-1">{place.title}</span>
+                                                        <span className="block text-sm text-gray-500 truncate mb-2">{place.address}</span>
+                                                        {/* 위치 인증 버튼/뱃지: 카드 하단 오른쪽에 깔끔하게 */}
+                                                        <div className="mt-2 flex justify-end w-full">
+                                                            {verifyStatus[place.id] === 'success' ? (
+                                                                <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 text-white font-bold shadow animate-fade-in text-xs sm:text-sm">
+                                                                    <FaCheckCircle className="w-5 h-5" /> 인증 완료
+                                                                </span>
+                                                            ) : verifyStatus[place.id] === 'pending' ? (
+                                                                <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 text-white font-semibold shadow animate-pulse text-xs sm:text-sm">
+                                                                    <FaSpinner className="animate-spin w-5 h-5" /> 인증 중...
+                                                                </span>
+                                                            ) : verifyStatus[place.id] === 'fail' ? (
+                                                                <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold shadow animate-shake text-xs sm:text-sm">
+                                                                    <FaExclamationTriangle className="w-5 h-5" /> 실패
+                                                                    <button
+                                                                        className="ml-2 underline text-xs text-white hover:text-yellow-200"
+                                                                        onClick={e => {
+                                                                            e.stopPropagation();
+                                                                            handleVerifyLocation(place);
+                                                                        }}
+                                                                    >재시도</button>
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    className="px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold shadow-md flex items-center gap-2 hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-300 transition text-xs sm:text-sm"
+                                                                    onClick={e => {
+                                                                        e.stopPropagation();
+                                                                        handleVerifyLocation(place);
+                                                                    }}
+                                                                >
+                                                                    <FaMapMarkerAlt className="w-4 h-4" /> 발자국 남기기
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </li>
+                                            )}
+                                        </Draggable>
+                                    ))}
+                                    {provided.placeholder}
+                                </ul>
+                            )}
+                        </Droppable>
+                    </DragDropContext>
                     {/* 일정 저장 폼 등 기존 코드 유지 */}
                     <div className="mt-4 border-t pt-4">
                         <form onSubmit={handleSaveItinerary} className="flex flex-col gap-2">
@@ -1962,55 +2028,53 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
         </>
     );
 
-    // 인증 상태 관리 (장소별)
-    const [verifyStatus, setVerifyStatus] = useState({});
+    // 발자국 인증 상태 관리 훅 사용
+    const {
+        verifyStatus,
+        isLoadingStatus,
+        updateVerificationStatus,
+        refreshVerificationStatus
+    } = useFootprintVerificationStatus(selectedItineraryId || itineraryId, places);
 
-    // 위치 인증 함수
+    // 발자국 인증 모달 관련 상태
+    const [isFootprintModalOpen, setIsFootprintModalOpen] = useState(false);
+    const [selectedPlaceForFootprint, setSelectedPlaceForFootprint] = useState(null);
+
+    // 위치 인증 함수 (발자국 시스템으로 업그레이드)
     const handleVerifyLocation = (place) => {
-        if (!navigator.geolocation) {
-            setToastMessage('이 브라우저에서는 위치 정보를 지원하지 않습니다.');
-            setShowToast(true);
-            return;
-        }
-        setVerifyStatus(prev => ({ ...prev, [place.id]: 'pending' }));
-        setToastMessage('위치 정보를 확인 중입니다...');
-        setShowToast(true);
-        navigator.geolocation.getCurrentPosition(async (pos) => {
-            try {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                const result = await verifyTourLocation({
-                    destinationId: place.id,
-                    lat,
-                    lon,
-                });
-                if (result.success) {
-                    setVerifyStatus(prev => ({ ...prev, [place.id]: 'success' }));
-                    setToastMessage('위치 인증이 완료되었습니다!');
-                } else {
-                    setVerifyStatus(prev => ({ ...prev, [place.id]: 'fail' }));
-                    setToastMessage(result.message || '위치 인증에 실패했습니다.');
-                }
-            } catch (err) {
-                setVerifyStatus(prev => ({ ...prev, [place.id]: 'fail' }));
-                setToastMessage('위치 인증 중 오류가 발생했습니다.');
-            }
-            setShowToast(true);
-        }, (err) => {
-            setVerifyStatus(prev => ({ ...prev, [place.id]: 'fail' }));
-            setToastMessage('위치 정보를 가져올 수 없습니다. 위치 권한을 허용해 주세요.');
-            setShowToast(true);
-        });
+        setSelectedPlaceForFootprint(place);
+        setIsFootprintModalOpen(true);
     };
+
+    // 발자국 생성 성공 처리
+    const handleFootprintCreated = (footprint) => {
+        const placeId = selectedPlaceForFootprint?.id;
+        if (placeId) {
+            updateVerificationStatus(placeId, 'success');
+            setToastMessage(`${selectedPlaceForFootprint.title} 발자국 인증 완료!`);
+            setShowToast(true);
+        }
+        setIsFootprintModalOpen(false);
+        setSelectedPlaceForFootprint(null);
+    };
+
+    // 일정 변경 시 인증 상태 새로고침
+    useEffect(() => {
+        if (selectedItineraryId || itineraryId) {
+            refreshVerificationStatus();
+        }
+    }, [selectedItineraryId, itineraryId, refreshVerificationStatus]);
 
     return (
         <div className="fixed inset-0 w-full h-full overflow-hidden">
             {/* 로딩 상태 표시 */}
-            {isLoading && (
+            {(isLoading || isLoadingStatus) && (
                 <div className="fixed inset-0 bg-white bg-opacity-80 flex items-center justify-center z-50">
                     <div className="flex flex-col items-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-4 border-teal-500 border-t-transparent"></div>
-                        <p className="mt-4 text-gray-600">일정을 불러오는 중...</p>
+                        <p className="mt-4 text-gray-600">
+                            {isLoading ? '일정을 불러오는 중...' : '발자국 상태를 확인하는 중...'}
+                        </p>
                     </div>
                 </div>
             )}
@@ -2213,6 +2277,25 @@ const CustomItinerary = ({ initialPlaces = [] }) => {
                     </div>
                 </div>
             )}
+
+            {/* 발자국 인증 모달 */}
+            <FootprintAuthModal
+                isOpen={isFootprintModalOpen}
+                onClose={() => {
+                    setIsFootprintModalOpen(false);
+                    setSelectedPlaceForFootprint(null);
+                }}
+                destination={selectedPlaceForFootprint}
+                itineraryId={selectedItineraryId || itineraryId}
+                onSuccess={handleFootprintCreated}
+            />
+
+            {/* 자동 발자국 인증 플로팅 버튼 */}
+            <FootprintFloatingButton
+                destinations={places}
+                itineraryId={selectedItineraryId || itineraryId}
+                onFootprintCreated={handleFootprintCreated}
+            />
         </div>
     );
 };

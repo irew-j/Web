@@ -9,7 +9,7 @@ const LoginPage = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const navigate = useNavigate();
-  const { setToken } = useAuth();
+    const { setToken } = useAuth();
 
     const handleSubmit = async (e) => {
         e.preventDefault();

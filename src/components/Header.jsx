@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { FaBars, FaTimes, FaDice, FaSearch, FaRandom } from "react-icons/fa"
+import { FaBars, FaTimes, FaDice, FaSearch, FaRandom, FaMapMarkerAlt, FaMap } from "react-icons/fa"
 import { Link, useNavigate } from "react-router-dom";
 import { logout } from "../api/auth"; // Import the logout function
 import { useAuth } from "../context/AuthContext";
@@ -88,6 +88,20 @@ const Header = ({ className = "" }) => {
                                 <FaRandom className="text-base" />
                                 랜덤 여행
                             </Link>
+                            <Link
+                                to="/my-footprints"
+                                className="flex items-center text-gray-700 hover:text-teal-600 font-semibold text-lg transition-colors duration-200 gap-2 px-3 py-2 rounded-full hover:bg-teal-50"
+                            >
+                                <FaMapMarkerAlt className="text-base" />
+                                나의 발자국
+                            </Link>
+                            <Link
+                                to="/my-travel-map"
+                                className="flex items-center text-gray-700 hover:text-teal-600 font-semibold text-lg transition-colors duration-200 gap-2 px-3 py-2 rounded-full hover:bg-teal-50"
+                            >
+                                <FaMap className="text-base" />
+                                여행 지도
+                            </Link>
                         </nav>
                         {/* 로그인/로그아웃 버튼 */}
                         {isLoggedIn ? (
@@ -149,6 +163,22 @@ const Header = ({ className = "" }) => {
                             >
                                 <FaRandom className="text-base" />
                                 랜덤 여행
+                            </Link>
+                            <Link
+                                to="/my-footprints"
+                                onClick={() => setIsMenuOpen(false)}
+                                className="flex items-center w-full text-left px-4 py-3 rounded-xl text-gray-700 hover:text-teal-600 hover:bg-teal-50 font-semibold text-lg gap-2 transition-colors duration-200"
+                            >
+                                <FaMapMarkerAlt className="text-base" />
+                                나의 발자국
+                            </Link>
+                            <Link
+                                to="/my-travel-map"
+                                onClick={() => setIsMenuOpen(false)}
+                                className="flex items-center w-full text-left px-4 py-3 rounded-xl text-gray-700 hover:text-teal-600 hover:bg-teal-50 font-semibold text-lg gap-2 transition-colors duration-200"
+                            >
+                                <FaMap className="text-base" />
+                                여행 지도
                             </Link>
                         </div>
                     </div>

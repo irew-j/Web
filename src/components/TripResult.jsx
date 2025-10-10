@@ -45,12 +45,24 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
                 return false;
             }
 
-            if (trips.length === 0 || !trips[selectedCourse] || trips[selectedCourse].length === 0) return false;
-            if (mapInstance) return true;
+            if (trips.length === 0 || !trips[selectedCourse] || trips[selectedCourse].length === 0) {
+                console.log("지도 초기화 조건 미충족:", {
+                    tripsLength: trips.length,
+                    selectedCourse,
+                    currentCourseLength: trips[selectedCourse]?.length
+                });
+                return false;
+            }
 
             try {
                 const bounds = new window.google.maps.LatLngBounds();
                 const currentCourse = trips[selectedCourse] || [];
+
+                console.log("지도 초기화 시작:", {
+                    courseIndex: selectedCourse,
+                    courseLength: currentCourse.length,
+                    courseData: currentCourse
+                });
 
                 // 데이터 유효성 검사 및 기본값 설정
                 if (!currentCourse.length || !currentCourse[0]) {
@@ -86,10 +98,18 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
                 });
                 setMapInstance(map);
 
+                // 기존 마커와 폴리라인 제거
                 markersRef.current.forEach(({ marker }) => marker?.setMap(null));
                 markersRef.current = [];
 
+                // 기존 폴리라인 제거
+                if (window.currentPolyline) {
+                    window.currentPolyline.setMap(null);
+                    window.currentPolyline = null;
+                }
+
                 const markerList = [];
+                const validCoordinates = [];
 
                 currentCourse.forEach((place, idx) => {
                     if (!place || !place.title) {
@@ -97,12 +117,24 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
                         return;
                     }
 
-                    // 좌표가 없는 경우 기본값 사용
-                    const lat = place.mapy || defaultLat;
-                    const lng = place.mapx || defaultLng;
+                    // 좌표 유효성 검사 및 변환
+                    let lat = parseFloat(place.mapy) || parseFloat(place.lat) || defaultLat;
+                    let lng = parseFloat(place.mapx) || parseFloat(place.lng) || defaultLng;
+
+                    // 좌표가 유효한 범위인지 확인
+                    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                        console.warn(`장소 ${idx + 1}의 좌표가 유효하지 않습니다:`, { lat, lng });
+                        lat = defaultLat;
+                        lng = defaultLng;
+                    }
+
+                    console.log(`장소 ${idx + 1}: ${place.title} - 좌표: ${lat}, ${lng}`);
+
+                    const position = new window.google.maps.LatLng(lat, lng);
+                    validCoordinates.push(position);
 
                     const marker = new window.google.maps.Marker({
-                        position: new window.google.maps.LatLng(lat, lng),
+                        position: position,
                         map,
                         title: place.title,
                         label: {
@@ -135,22 +167,51 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
 
                         marker.addListener("click", () => {
                             infoWindow.open(map, marker);
-                            map.panTo(new window.google.maps.LatLng(lat, lng));
+                            map.panTo(position);
                             map.setZoom(16);
                         });
                     } else {
                         marker.addListener("click", () => {
                             setActiveTrip(idx);
-                            map.panTo(new window.google.maps.LatLng(lat, lng));
+                            map.panTo(position);
                             map.setZoom(16);
                         });
                     }
 
-                    bounds.extend(new window.google.maps.LatLng(lat, lng));
+                    bounds.extend(position);
                     markerList.push({ marker, place });
                 });
 
                 markersRef.current = markerList;
+
+                // 연결 선(Polyline) 생성 - 2개 이상의 장소가 있을 때만
+                if (validCoordinates.length > 1) {
+                    const polyline = new window.google.maps.Polyline({
+                        path: validCoordinates,
+                        geodesic: true,
+                        strokeColor: color,
+                        strokeOpacity: 0.8,
+                        strokeWeight: 3,
+                        icons: [{
+                            icon: {
+                                path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                scale: 3,
+                                strokeColor: color,
+                                fillColor: color,
+                                fillOpacity: 1
+                            },
+                            offset: '100%',
+                            repeat: '50px'
+                        }]
+                    });
+
+                    polyline.setMap(map);
+                    window.currentPolyline = polyline;
+
+                    console.log(`연결 선 생성 완료: ${validCoordinates.length}개 지점 연결`);
+                } else {
+                    console.log('연결 선 생성 안함: 장소가 1개뿐입니다.');
+                }
                 map.fitBounds(bounds);
 
                 if (currentCourse.length === 1) {
@@ -174,6 +235,11 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
         return () => {
             if (intervalId) clearInterval(intervalId);
             markersRef.current.forEach(({ marker }) => marker?.setMap(null));
+            // 폴리라인 정리
+            if (window.currentPolyline) {
+                window.currentPolyline.setMap(null);
+                window.currentPolyline = null;
+            }
         };
     }, [trips, selectedCourse]);
 
@@ -274,28 +340,20 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
                 return imageCache.get(cacheKey);
             }
 
-            const service = new window.google.maps.places.PlacesService(mapInstance);
+            const { Place } = await window.google.maps.importLibrary("places");
 
             // 1. place_id가 있으면 getDetails로 시도
             if (place.place_id || place.id) {
                 const placeId = place.place_id || place.id;
                 try {
-                    const photoUrl = await new Promise((resolve, reject) => {
-                        service.getDetails({
-                            placeId,
-                            fields: ["photos"]
-                        }, (result, status) => {
-                            console.log('getDetails result:', { place, placeId, status, result });
-                            if (status === window.google.maps.places.PlacesServiceStatus.OK && result && result.photos && result.photos.length > 0) {
-                                const url = result.photos[0].getUrl({ maxWidth: 400, maxHeight: 200 });
-                                imageCache.set(cacheKey, url);
-                                resolve(url);
-                            } else {
-                                resolve(null); // fallback
-                            }
-                        });
-                    });
-                    if (photoUrl) return photoUrl;
+                    const placeObj = new Place({ id: placeId });
+                    await placeObj.fetchFields({ fields: ["photos"] });
+                    if (placeObj.photos && placeObj.photos.length > 0) {
+                        const photoUrl = placeObj.photos[0].getURI({ maxWidth: 400, maxHeight: 200 });
+                        console.log("Got image URL from fetchFields:", photoUrl);
+                        imageCache.set(cacheKey, photoUrl);
+                        return photoUrl;
+                    }
                 } catch (e) {
                     // fallback
                 }
@@ -303,11 +361,9 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
 
             // 2. place_id가 없거나 getDetails 실패 시 textSearch fallback
             const requestFn = async () => {
-                // 장소명 + 주소(시/구 등)로 쿼리 보정 (다양한 조합 시도)
                 let queryList = [];
                 if (place.title && place.address) {
                     const addressParts = place.address.split(' ');
-                    // 예: 장소명, 장소명+시, 장소명+구, 장소명+전체주소
                     queryList.push(place.title);
                     if (addressParts.length > 0) queryList.push(`${place.title}, ${addressParts[0]}`);
                     if (addressParts.length > 1) queryList.push(`${place.title}, ${addressParts[1]}`);
@@ -315,39 +371,32 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
                 } else {
                     queryList.push(place.title);
                 }
-                // 갈맷길 예외처리 유지
                 if (place.title.includes("갈맷길")) {
                     queryList = ["민락교, 부산"];
                 }
-                // 여러 쿼리 조합을 순차적으로 시도
-                let lastStatus = null;
+
                 for (let i = 0; i < queryList.length; i++) {
                     const query = queryList[i];
-                    const result = await new Promise((resolve, reject) => {
-                        const timeoutId = setTimeout(() => {
-                            reject(new Error("Request timeout"));
-                        }, 30000);
-                        service.textSearch({
-                            query: query,
-                            fields: ["photos", "geometry"],
-                        }, (results, status) => {
-                            clearTimeout(timeoutId);
-                            lastStatus = status;
-                            if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
-                                const photoUrl = results[0].photos?.[0]?.getUrl({ maxWidth: 400, maxHeight: 200 }) ||
-                                    `/placeholder.svg?height=300&width=500&text=${encodeURIComponent(place.title)}`;
-                                imageCache.set(cacheKey, photoUrl);
-                                resolve(photoUrl);
-                            } else if (status === window.google.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT) {
-                                reject(new Error("OVER_QUERY_LIMIT"));
-                            } else {
-                                resolve(null); // 다음 쿼리로 넘어감
-                            }
-                        });
-                    });
-                    if (result) return result;
+                    try {
+                        const request = {
+                            textQuery: query,
+                            fields: ["photos"],
+                        };
+                        const { places } = await Place.searchByText(request);
+                        if (places.length > 0 && places[0].photos && places[0].photos.length > 0) {
+                            const photoUrl = places[0].photos[0].getURI({ maxWidth: 400, maxHeight: 200 });
+                            console.log("Got image URL from searchByText:", photoUrl);
+                            imageCache.set(cacheKey, photoUrl);
+                            return photoUrl;
+                        }
+                    } catch (error) {
+                        if (error.code === 'OVER_QUERY_LIMIT') {
+                            throw new Error("OVER_QUERY_LIMIT");
+                        }
+                        console.error("searchByText error", error);
+                    }
                 }
-                // 모든 쿼리 실패 시 placeholder 반환
+
                 const placeholderUrl = `/placeholder.svg?height=300&width=500&text=${encodeURIComponent(place.title)}`;
                 imageCache.set(cacheKey, placeholderUrl);
                 return placeholderUrl;
@@ -433,8 +482,15 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
         setActiveTrip(index);
         if (mapInstance) {
             const place = trips[selectedCourse][index];
-            const lat = place.mapy || defaultLat;
-            const lng = place.mapx || defaultLng;
+            let lat = parseFloat(place.mapy) || parseFloat(place.lat) || defaultLat;
+            let lng = parseFloat(place.mapx) || parseFloat(place.lng) || defaultLng;
+
+            // 좌표 유효성 검사
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                lat = defaultLat;
+                lng = defaultLng;
+            }
+
             const position = new window.google.maps.LatLng(lat, lng);
             mapInstance.panTo(position);
             mapInstance.setZoom(16);
@@ -619,7 +675,3 @@ export default function TripResult({ tripPlan = [], color = "#0D9488", onCreateC
         </div>
     )
 }
-
-
-
-
