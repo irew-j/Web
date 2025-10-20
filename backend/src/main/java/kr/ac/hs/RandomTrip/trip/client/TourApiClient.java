@@ -21,11 +21,28 @@ public class TourApiClient {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public JsonNode fetchAreaBasedList(int pageNo, int numOfRows) throws Exception {
+        return fetchAreaBasedList(pageNo, numOfRows, null, null, null, null);
+    }
+
+    public JsonNode fetchAreaBasedList(int pageNo, int numOfRows, String contentTypeId, String cat1, String cat2, String cat3) throws Exception {
         StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/B551011/KorService2/areaBasedList2");
         urlBuilder.append("?serviceKey=").append(URLEncoder.encode(tourApiKey, StandardCharsets.UTF_8.toString()));
         urlBuilder.append("&numOfRows=").append(numOfRows);
         urlBuilder.append("&pageNo=").append(pageNo);
         urlBuilder.append("&MobileOS=ETC&MobileApp=RandomTrip&_type=json&arrange=R");
+
+        if (contentTypeId != null && !contentTypeId.isEmpty()) {
+            urlBuilder.append("&contentTypeId=").append(contentTypeId);
+        }
+        if (cat1 != null && !cat1.isEmpty()) {
+            urlBuilder.append("&cat1=").append(cat1);
+        }
+        if (cat2 != null && !cat2.isEmpty()) {
+            urlBuilder.append("&cat2=").append(cat2);
+        }
+        if (cat3 != null && !cat3.isEmpty()) {
+            urlBuilder.append("&cat3=").append(cat3);
+        }
 
         return executeGetRequest(urlBuilder.toString()).path("response").path("body").path("items").path("item");
     }

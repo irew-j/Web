@@ -318,4 +318,65 @@ public class TripRecommendationService {
             return new TripResponseDto(); // 오류 발생 시 빈 TripResponse 반환
         }
     }
+
+    @Transactional
+    public TripResponseDto getRandomDestinationByTheme(String theme) {
+        String contentTypeId = null;
+        String cat1 = null;
+        String cat2 = null;
+        String cat3 = null;
+
+        switch (theme) {
+            case "맛집":
+                contentTypeId = "39";
+                cat1 = "A05";
+                cat2 = "A0502";
+                List<String> foodCategories = Arrays.asList("A05020100", "A05020200", "A05020300", "A05020400", "A05020500", "A05020600", "A05020700", "A05021100");
+                cat3 = foodCategories.get(random.nextInt(foodCategories.size()));
+                break;
+            case "카페":
+                contentTypeId = "39";
+                cat1 = "A05";
+                cat2 = "A0502";
+                cat3 = "A05020900";
+                break;
+            case "자연":
+                contentTypeId = "12";
+                cat1 = "A01";
+                cat2 = "A0101";
+                break;
+            case "역사":
+                contentTypeId = "12";
+                cat1 = "A02";
+                cat2 = "A0201";
+                break;
+            case "엑티비티":
+                contentTypeId = "28";
+                break;
+            default:
+                // 지원하지 않는 테마의 경우, 기존 랜덤 로직을 따르거나 예외 처리
+                return getRandomDestination();
+        }
+
+        try {
+            int maxRetries = 10;
+            for (int i = 0; i < maxRetries; i++) {
+                int randomPage = random.nextInt(50) + 1; // 페이지 수를 줄여서 더 관련성 높은 결과를 얻도록 시도
+                JsonNode items = tourApiClient.fetchAreaBasedList(randomPage, 20, contentTypeId, cat1, cat2, cat3);
+
+                if (items.isArray() && items.size() > 0) {
+                    JsonNode selected = items.get(random.nextInt(items.size()));
+                    Destination destination = destinationService.findOrCreateDestinationFromTour(selected);
+                    if (destination != null) {
+                        return destinationMapper.toTripResponse(destination);
+                    }
+                }
+            }
+            System.err.println("테마별 랜덤 관광지 검색 실패: " + theme);
+            return new TripResponseDto();
+        } catch (Exception e) {
+            System.err.println("getRandomDestinationByTheme API 호출 오류: " + e.getMessage());
+            return new TripResponseDto();
+        }
+    }
 }
