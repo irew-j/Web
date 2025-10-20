@@ -17,6 +17,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 @Service
 public class TripRecommendationService {
@@ -331,8 +333,6 @@ public class TripRecommendationService {
                 contentTypeId = "39";
                 cat1 = "A05";
                 cat2 = "A0502";
-                List<String> foodCategories = Arrays.asList("A05020100", "A05020200", "A05020300", "A05020400", "A05020500", "A05020600", "A05020700", "A05021100");
-                cat3 = foodCategories.get(random.nextInt(foodCategories.size()));
                 break;
             case "카페":
                 contentTypeId = "39";
@@ -361,14 +361,33 @@ public class TripRecommendationService {
         try {
             int maxRetries = 10;
             for (int i = 0; i < maxRetries; i++) {
-                int randomPage = random.nextInt(50) + 1; // 페이지 수를 줄여서 더 관련성 높은 결과를 얻도록 시도
+                int randomPage = random.nextInt(50) + 1;
                 JsonNode items = tourApiClient.fetchAreaBasedList(randomPage, 20, contentTypeId, cat1, cat2, cat3);
 
                 if (items.isArray() && items.size() > 0) {
-                    JsonNode selected = items.get(random.nextInt(items.size()));
-                    Destination destination = destinationService.findOrCreateDestinationFromTour(selected);
-                    if (destination != null) {
-                        return destinationMapper.toTripResponse(destination);
+                    // 2-1. API 결과를 스트림으로 변환
+                    Stream<JsonNode> itemStream = StreamSupport.stream(items.spliterator(), false);
+
+                    // 2-2. "맛집" 테마일 때만 카페(A05020900) 필터링
+                    List<JsonNode> filteredItems;
+                    if ("맛집".equals(theme)) {
+                        filteredItems = itemStream
+                                .filter(item -> !item.has("cat3") || !"A05020900".equals(item.get("cat3").asText()))
+                                .collect(Collectors.toList());
+                    } else {
+                        // "카페"나 "자연" 등 다른 테마는 모든 결과를 그대로 사용
+                        filteredItems = itemStream.collect(Collectors.toList());
+                    }
+
+                    // 2-3. 필터링된 리스트가 비어있지 않은지 확인
+                    if (!filteredItems.isEmpty()) {
+                        // 2-4. *필터링된 리스트*에서 랜덤 아이템 선택
+                        JsonNode selected = filteredItems.get(random.nextInt(filteredItems.size()));
+
+                        Destination destination = destinationService.findOrCreateDestinationFromTour(selected);
+                        if (destination != null) {
+                            return destinationMapper.toTripResponse(destination);
+                        }
                     }
                 }
             }
