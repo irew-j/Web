@@ -17,6 +17,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 @Service
 public class TripRecommendationService {
@@ -316,6 +318,84 @@ public class TripRecommendationService {
         } catch (Exception e) {
             System.err.println("getRandomDestination API 호출 오류: " + e.getMessage());
             return new TripResponseDto(); // 오류 발생 시 빈 TripResponse 반환
+        }
+    }
+
+    @Transactional
+    public TripResponseDto getRandomDestinationByTheme(String theme) {
+        String contentTypeId = null;
+        String cat1 = null;
+        String cat2 = null;
+        String cat3 = null;
+
+        switch (theme) {
+            case "맛집":
+                contentTypeId = "39";
+                cat1 = "A05";
+                cat2 = "A0502";
+                break;
+            case "카페":
+                contentTypeId = "39";
+                cat1 = "A05";
+                cat2 = "A0502";
+                cat3 = "A05020900";
+                break;
+            case "자연":
+                contentTypeId = "12";
+                cat1 = "A01";
+                cat2 = "A0101";
+                break;
+            case "역사":
+                contentTypeId = "12";
+                cat1 = "A02";
+                cat2 = "A0201";
+                break;
+            case "엑티비티":
+                contentTypeId = "28";
+                break;
+            default:
+                // 지원하지 않는 테마의 경우, 기존 랜덤 로직을 따르거나 예외 처리
+                return getRandomDestination();
+        }
+
+        try {
+            int maxRetries = 10;
+            for (int i = 0; i < maxRetries; i++) {
+                int randomPage = random.nextInt(50) + 1;
+                JsonNode items = tourApiClient.fetchAreaBasedList(randomPage, 20, contentTypeId, cat1, cat2, cat3);
+
+                if (items.isArray() && items.size() > 0) {
+                    // 2-1. API 결과를 스트림으로 변환
+                    Stream<JsonNode> itemStream = StreamSupport.stream(items.spliterator(), false);
+
+                    // 2-2. "맛집" 테마일 때만 카페(A05020900) 필터링
+                    List<JsonNode> filteredItems;
+                    if ("맛집".equals(theme)) {
+                        filteredItems = itemStream
+                                .filter(item -> !item.has("cat3") || !"A05020900".equals(item.get("cat3").asText()))
+                                .collect(Collectors.toList());
+                    } else {
+                        // "카페"나 "자연" 등 다른 테마는 모든 결과를 그대로 사용
+                        filteredItems = itemStream.collect(Collectors.toList());
+                    }
+
+                    // 2-3. 필터링된 리스트가 비어있지 않은지 확인
+                    if (!filteredItems.isEmpty()) {
+                        // 2-4. *필터링된 리스트*에서 랜덤 아이템 선택
+                        JsonNode selected = filteredItems.get(random.nextInt(filteredItems.size()));
+
+                        Destination destination = destinationService.findOrCreateDestinationFromTour(selected);
+                        if (destination != null) {
+                            return destinationMapper.toTripResponse(destination);
+                        }
+                    }
+                }
+            }
+            System.err.println("테마별 랜덤 관광지 검색 실패: " + theme);
+            return new TripResponseDto();
+        } catch (Exception e) {
+            System.err.println("getRandomDestinationByTheme API 호출 오류: " + e.getMessage());
+            return new TripResponseDto();
         }
     }
 }

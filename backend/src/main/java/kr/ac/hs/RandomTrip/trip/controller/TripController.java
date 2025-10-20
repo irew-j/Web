@@ -38,6 +38,15 @@ public class TripController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/random-by-theme")
+    @Operation(summary = "테마별 랜덤 관광지 조회", description = "테마(맛집, 카페, 자연, 역사, 엑티비티)에 맞는 랜덤 관광지를 추천합니다")
+    public ResponseEntity<TripResponseDto> getRandomDestinationByTheme(
+            @Parameter(description = "테마 (맛집, 카페, 자연, 역사, 엑티비티)", example = "카페")
+            @RequestParam String theme) {
+        TripResponseDto response = tripRecommendationService.getRandomDestinationByTheme(theme);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/recommend-walk")
     @Operation(summary = "도보 여행 코스 추천", description = "도보로 이동 가능한 여행 코스를 추천합니다")
     public ResponseEntity<List<List<TripResponseDto>>> recommendTripWalk(@RequestBody TripRecommendRequestDto request) {
