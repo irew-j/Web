@@ -2,6 +2,7 @@ package kr.ac.hs.RandomTrip.trip.controller;
 
 import java.util.List;
 
+import kr.ac.hs.RandomTrip.trip.dto.LocationBasedTripRequestDto;
 import kr.ac.hs.RandomTrip.trip.service.DirectionService;
 import kr.ac.hs.RandomTrip.trip.service.PlaceSearchService;
 import kr.ac.hs.RandomTrip.trip.service.TripRecommendationService;
@@ -18,6 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequestDto;
+import kr.ac.hs.RandomTrip.trip.dto.LocationBasedTripRequestDto;
 import kr.ac.hs.RandomTrip.trip.dto.TripResponseDto;
 import reactor.core.publisher.Mono;
 
@@ -44,6 +46,14 @@ public class TripController {
             @Parameter(description = "테마 (맛집, 카페, 자연, 역사, 엑티비티)", example = "카페")
             @RequestParam String theme) {
         TripResponseDto response = tripRecommendationService.getRandomDestinationByTheme(theme);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/random-by-location")
+    @Operation(summary = "위치 기반 랜덤 관광지 조회", description = "현재 위치와 지정된 거리(m) 내의 랜덤 관광지를 추천합니다")
+    public ResponseEntity<TripResponseDto> getRandomDestinationByLocation(
+            @RequestBody LocationBasedTripRequestDto request) {
+        TripResponseDto response = tripRecommendationService.recommendTripByLocation(request);
         return ResponseEntity.ok(response);
     }
 
