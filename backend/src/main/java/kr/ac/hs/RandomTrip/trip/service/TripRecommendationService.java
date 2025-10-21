@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import kr.ac.hs.RandomTrip.trip.client.KakaoApiClient;
 import kr.ac.hs.RandomTrip.trip.client.TourApiClient;
 import kr.ac.hs.RandomTrip.trip.domain.Destination;
+import kr.ac.hs.RandomTrip.trip.dto.LocationBasedTripRequestDto;
 import kr.ac.hs.RandomTrip.trip.dto.TripRecommendRequestDto;
 import kr.ac.hs.RandomTrip.trip.dto.TripResponseDto;
 import kr.ac.hs.RandomTrip.trip.llm.LlmTravelCourseExtractor;
@@ -396,6 +397,50 @@ public class TripRecommendationService {
         } catch (Exception e) {
             System.err.println("getRandomDestinationByTheme API 호출 오류: " + e.getMessage());
             return new TripResponseDto();
+        }
+    }
+
+    @Transactional
+    public TripResponseDto recommendTripByLocation(LocationBasedTripRequestDto request) {
+        try {
+            // 위치 기반으로 100개의 관광 정보를 가져옴
+            JsonNode items = tourApiClient.fetchLocationBasedList(
+                    request.getLongitude(),
+                    request.getLatitude(),
+                    request.getRadius(),
+                    100, // numOfRows
+                    null // contentTypeId
+            );
+
+            if (items.isArray() && items.size() > 0) {
+                // 허용된 콘텐츠 타입으로 필터링
+                String[] allowedContentTypes = {"12", "14", "25", "28"}; // 관광지, 문화시설, 여행코스, 레포츠
+                List<JsonNode> filtered = new ArrayList<>();
+                for (JsonNode item : items) {
+                    String contentTypeId = item.path("contenttypeid").asText();
+                    if (Arrays.asList(allowedContentTypes).contains(contentTypeId)) {
+                        filtered.add(item);
+                    }
+                }
+
+                if (!filtered.isEmpty()) {
+                    // 필터링된 결과에서 랜덤으로 하나 선택
+                    JsonNode selected = filtered.get(random.nextInt(filtered.size()));
+
+                    // DB에서 찾아보고 없으면 새로 저장
+                    Destination destination = destinationService.findOrCreateDestinationFromTour(selected);
+
+                    if (destination != null) {
+                        return destinationMapper.toTripResponse(destination);
+                    }
+                }
+            }
+            // 조건에 맞는 관광지가 없는 경우
+            System.err.println("위치 기반 랜덤 관광지 검색 실패: 반경 내에 조건에 맞는 관광지가 없습니다.");
+            return new TripResponseDto(); // 실패 시 빈 TripResponse 반환
+        } catch (Exception e) {
+            System.err.println("recommendTripByLocation API 호출 오류: " + e.getMessage());
+            return new TripResponseDto(); // 오류 발생 시 빈 TripResponse 반환
         }
     }
 }
